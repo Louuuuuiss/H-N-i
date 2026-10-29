@@ -648,9 +648,11 @@
             {name:"Hemispheres Steak & Seafood",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("21.0596713,105.8316623"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0596713,105.8316623],symbol:'🍜'},
             {name:"Etēsia",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("21.0313707,105.8551929"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0313707,105.8551929],symbol:'🍜'},
             {name:"A Bản Mountain Dew",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("21.0321279,105.8335967"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0321279,105.8335967],symbol:'🍜'},
-            {name:"1946 Cua Bac",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("21.0415693,105.8423904"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0415693,105.8423904],symbol:'🍜'}
+            {name:"1946 Cua Bac",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("21.0415693,105.8423904"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0415693,105.8423904],symbol:'🍜'},
+            {name:"Lamai Garden",url:"https://www.google.com/maps/place/Lamai+Garden/@21.0662366,105.8330974,17z/data=!3m1!4b1!4m6!3m5!1s0x3135abd214dacec5:0xb23417c8b4b43b32!8m2!3d21.0662366!4d105.8356777!16s%2Fg%2F11sd1sw1x3?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D",type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0662366,105.8356777],symbol:'🍜'}
         );
         const restaurantMapCoordinates = new Map(mapLocations.filter(place => place.type === 'food').map(place => [place.name, place.coords]));
+        const restaurantMapLinks = new Map(mapLocations.filter(place => place.type === 'food').map(place => [place.name, place.url]));
         // ===== 自訂圖磚地圖（無 Leaflet、無地理編碼、無 API 金鑰）=====
         // 底圖來源依序嘗試；某一來源的圖磚載入失敗時，該圖磚自動改用下一個來源。
         const TILE_PROVIDERS = [
@@ -971,7 +973,7 @@
 
                 const coords = restaurantMapCoordinates.get(item.name);
                 const mapQuery = coords ? coords.join(',') : item.name + ' Hanoi Vietnam';
-                const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(mapQuery);
+                const mapUrl = restaurantMapLinks.get(item.name) || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(mapQuery));
                 const card = `
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
                         <div class="pr-2">
