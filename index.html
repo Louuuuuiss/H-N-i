@@ -649,7 +649,7 @@
             {name:"Etēsia",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("Etēsia, Hanoi, Vietnam"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0313707,105.8551929],symbol:'🍜'},
             {name:"A Bản Mountain Dew",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("A Bản Mountain Dew, Hanoi, Vietnam"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0321279,105.8335967],symbol:'🍜'},
             {name:"1946 Cua Bac",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("1946 Cua Bac, Hanoi, Vietnam"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0415693,105.8423904],symbol:'🍜'},
-            {name:"Lamai Garden",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("Lamai Garden, 36B Đ. Đê Quai, Hồng Hà, Hà Nội, Vietnam"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0662366,105.8356777],symbol:'🍜'},
+            {name:"Lamai Garden",url:"https://www.google.com/maps/place/Lamai+Garden/@21.0662366,105.8330974,17z/data=!3m1!4b1!4m6!3m5!1s0x3135abd214dacec5:0xb23417c8b4b43b32!8m2!3d21.0662366!4d105.8356777!16s%2Fg%2F11sd1sw1x3?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D",type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0662366,105.8356777],symbol:'🍜'},
             {name:"Ngon Garden",url:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent("Ngon Garden, 70 Nguyễn Du, Cửa Nam, Hà Nội, Vietnam"),type:'food',label:'美食',icon:'fa-utensils',color:'#059669',coords:[21.0197517,105.845199],symbol:'🍜'}
         );
         // ===== 自訂圖磚地圖（無 Leaflet、無地理編碼、無 API 金鑰）=====
@@ -972,10 +972,10 @@
 
                 const mapQuery = item.name === 'Ngon Garden'
                     ? 'Ngon Garden, 70 Nguyễn Du, Cửa Nam, Hà Nội, Vietnam'
-                    : item.name === 'Lamai Garden'
-                        ? 'Lamai Garden, 36B Đ. Đê Quai, Hồng Hà, Hà Nội, Vietnam'
-                        : item.name + ', Hanoi, Vietnam';
-                const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(mapQuery);
+                    : item.name + ', Hanoi, Vietnam';
+                const mapUrl = item.name === 'Lamai Garden'
+                    ? "https://www.google.com/maps/place/Lamai+Garden/@21.0662366,105.8330974,17z/data=!3m1!4b1!4m6!3m5!1s0x3135abd214dacec5:0xb23417c8b4b43b32!8m2!3d21.0662366!4d105.8356777!16s%2Fg%2F11sd1sw1x3?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D"
+                    : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(mapQuery);
                 const card = `
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
                         <div class="pr-2">
