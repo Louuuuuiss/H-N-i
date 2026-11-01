@@ -99,7 +99,11 @@
     renderCards("sec-attractions", state.places.attractions, "景點");
     renderCards("sec-entertainment", state.places.entertainment, "娛樂");
     renderCards("sec-food", state.places.food, "美食");
-    if (typeof mapLocations !== "undefined") { mapLocations.splice(0, mapLocations.length, ...categoryMap()); if (document.getElementById("sec-map") && !document.getElementById("sec-map").classList.contains("hidden") && typeof initializeTravelMap === "function") initializeTravelMap(); }
+    if (typeof mapLocations !== "undefined") {
+      mapLocations.splice(0, mapLocations.length, ...categoryMap());
+      if (typeof pinElements !== "undefined") for (const [name, pin] of pinElements) if (!mapLocations.some(place => place.name === name)) { pin.remove(); pinElements.delete(name); }
+      if (document.getElementById("sec-map") && !document.getElementById("sec-map").classList.contains("hidden") && typeof initializeTravelMap === "function") { if (typeof fitMapToPlaces === "function" && mapLocations.length) fitMapToPlaces(); initializeTravelMap(); }
+    }
   }
 
   function renderCards(sectionId, items, badge) {
