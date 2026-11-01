@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.cloudflare.com/wrangler.json",
+  "name": "hanoi-trip-editor-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-02",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGIN": "https://louuuuuiss.github.io"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hanoi-trip-db",
+      "database_id": "5368288c-ad95-4bc2-90e5-ba3969d5c078"
+    }
+  ]
+}
+
