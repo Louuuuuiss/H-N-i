@@ -48,6 +48,7 @@
     }
     const h1 = document.querySelector("header h1");
     return {
+      flag: document.querySelector("header .text-2xl")?.textContent.trim() || "✈️",
       title: h1?.textContent.trim() || "旅行行程",
       dateRange: document.querySelector("header p")?.textContent.trim() || "",
       duration: document.querySelector("header span.bg-red-800")?.textContent.trim() || "",
@@ -81,6 +82,8 @@
 
   function renderPage() {
     if (!state) return;
+    document.title = state.title || "旅行行程";
+    const flag = document.querySelector("header .text-2xl"); if (flag && state.flag) flag.textContent = state.flag;
     const title = document.querySelector("header h1"); if (title) title.textContent = state.title;
     const date = document.querySelector("header p"); if (date) date.textContent = state.dateRange;
     const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration;
@@ -99,6 +102,8 @@
     renderCards("sec-attractions", state.places.attractions, "景點");
     renderCards("sec-entertainment", state.places.entertainment, "娛樂");
     renderCards("sec-food", state.places.food, "美食");
+    const legend = document.querySelector("#sec-map .bg-white .flex");
+    if (legend) { legend.replaceChildren(); const all = [...state.places.attractions, ...state.places.entertainment, ...state.places.food]; [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => legend.append(el("span", "inline-flex items-center gap-1.5 bg-slate-100 rounded-full px-2 py-1", category))); }
     if (typeof mapLocations !== "undefined") {
       mapLocations.splice(0, mapLocations.length, ...categoryMap());
       if (typeof pinElements !== "undefined") for (const [name, pin] of pinElements) if (!mapLocations.some(place => place.name === name)) { pin.remove(); pinElements.delete(name); }
@@ -170,7 +175,7 @@
 
   function input(label, name, value, type = "text", placeholder = "") { return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`; }
   function tabContents() {
-    if (activeTab === "trip") return `<div class="edit-grid">${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
+    if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
     if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${input("日期", `days.${i}.date`, day.date)}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${input("時間", `days.${i}.items.${j}.time`, item.time, "text", "例如 09:00-10:00")}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${items.map((item, i) => `<details class="edit-card"><summary>${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${input("標籤", `places.${key}.${i}.category`, item.category, "text", key === "food" ? "例如 必比登" : "例如 SPA／Massage")}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
