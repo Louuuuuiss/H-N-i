@@ -117,8 +117,8 @@ export default {
         const body = await request.json().catch(() => null);
         if (!body || !/^[a-f0-9-]{36}$/i.test(String(body.clientId || ""))) return json({ error: "識別碼不正確。" }, 400, origin);
         const clientHash = await hmac(body.clientId, env.AUTH_SECRET);
-        const rows = await env.DB.prepare("SELECT place_id FROM place_favorites WHERE client_hash = ?").bind(clientHash).all();
-        const favorites = (rows.results || []).map(row => row.place_id);
+        if (!Array.isArray(body.favorites) || body.favorites.length > 1000 || body.favorites.some(id => typeof id !== "string" || id.length > 1000)) return json({ error: "收藏資料格式不正確。" }, 400, origin);
+        const favorites = [...new Set(body.favorites)];
         if (!favorites.length) return json({ error: "目前沒有最愛項目可分享，請先加入景點、娛樂或美食。" }, 400, origin);
         const token = randomToken();
         const expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
