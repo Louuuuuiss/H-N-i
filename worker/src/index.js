@@ -113,6 +113,30 @@ export default {
         return json({ saved: true }, 200, origin);
       }
 
+      if (url.pathname === "/api/favorites/share" && request.method === "POST") {
+        const body = await request.json().catch(() => null);
+        if (!body || !/^[a-f0-9-]{36}$/i.test(String(body.clientId || ""))) return json({ error: "識別碼不正確。" }, 400, origin);
+        const clientHash = await hmac(body.clientId, env.AUTH_SECRET);
+        const rows = await env.DB.prepare("SELECT place_id FROM place_favorites WHERE client_hash = ?").bind(clientHash).all();
+        const favorites = (rows.results || []).map(row => row.place_id);
+        if (!favorites.length) return json({ error: "目前沒有最愛項目可分享，請先加入景點、娛樂或美食。" }, 400, origin);
+        const token = randomToken();
+        const expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        await env.DB.prepare("INSERT INTO favorite_shares(token_hash, client_hash, favorite_ids, expires) VALUES(?, ?, ?, ?)").bind(await digest(token), clientHash, JSON.stringify(favorites), expires).run();
+        return json({ token, expiresIn: 30 * 24 * 60 * 60 }, 200, origin);
+      }
+
+      if (url.pathname === "/api/favorites/share" && request.method === "GET") {
+        const token = url.searchParams.get("token") || "";
+        if (!/^[a-f0-9]{64}$/i.test(token)) return json({ error: "分享連結不正確。" }, 400, origin);
+        const row = await env.DB.prepare("SELECT favorite_ids, expires FROM favorite_shares WHERE token_hash = ?").bind(await digest(token)).first();
+        if (!row || Number(row.expires) < Date.now()) {
+          if (row) await env.DB.prepare("DELETE FROM favorite_shares WHERE token_hash = ?").bind(await digest(token)).run();
+          return json({ error: "分享連結已逾期或不存在。" }, 410, origin);
+        }
+        return json({ favorites: JSON.parse(row.favorite_ids), expires: Number(row.expires) }, 200, origin);
+      }
+
       if (url.pathname === "/api/favorites" && request.method === "GET") {
         const clientId = url.searchParams.get("clientId") || "";
         if (!/^[a-f0-9-]{36}$/i.test(clientId)) return json({ error: "識別碼不正確。" }, 400, origin);
