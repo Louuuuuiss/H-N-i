@@ -888,7 +888,7 @@
         }
 
         function bindMapEvents(map) {
-            map.querySelectorAll(".map-filter-btn").forEach(button => {
+            document.querySelectorAll("#map-category-filter .map-filter-btn").forEach(button => {
                 button.addEventListener("click", event => {
                     event.stopPropagation();
                     filterMapByCategory(button.dataset.mapCategory, button);
