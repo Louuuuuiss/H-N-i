@@ -2,6 +2,12 @@
   const API = window.TRIP_API_URL || "";
   const TOKEN_KEY = "hanoi-trip-editor-token";
   const FAVORITES_KEY = "hanoi-trip-favorites-v1";
+  const FAVORITE_CLIENT_KEY = "hanoi-trip-favorites-client-v1";
+  let favoriteClientId = localStorage.getItem(FAVORITE_CLIENT_KEY);
+  if (!favoriteClientId || !/^[a-f0-9-]{36}$/i.test(favoriteClientId)) {
+    favoriteClientId = crypto.randomUUID();
+    localStorage.setItem(FAVORITE_CLIENT_KEY, favoriteClientId);
+  }
   let favorites;
   try { favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")); }
   catch { favorites = new Set(); }
@@ -159,6 +165,7 @@
       favorite.addEventListener("click", () => {
         if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
         saveFavorites();
+        api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId: id, favorite: favorites.has(id) }) }).catch(error => console.warn("雲端收藏同步失敗：", error.message));
         const active = favorites.has(id);
         favorite.textContent = active ? "♥" : "♡";
         favorite.classList.toggle("is-favorite", active);
@@ -287,6 +294,15 @@
     try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
     if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
+    try {
+      const remote = await api("/api/favorites?clientId=" + encodeURIComponent(favoriteClientId));
+      const serverFavorites = Array.isArray(remote.favorites) ? remote.favorites : [];
+      for (const id of serverFavorites) favorites.add(id);
+      saveFavorites();
+      const uploads = [...favorites].map(placeId => api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId, favorite: true }) }));
+      await Promise.allSettled(uploads);
+      renderPage();
+    } catch (error) { console.warn("雲端收藏尚未同步：", error.message); }
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
