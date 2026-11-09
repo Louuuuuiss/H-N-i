@@ -3,6 +3,8 @@
   const TOKEN_KEY = "hanoi-trip-editor-token";
   const FAVORITES_KEY = "hanoi-trip-favorites-v1";
   const FAVORITE_CLIENT_KEY = "hanoi-trip-favorites-client-v1";
+  const favoriteShareToken = new URLSearchParams(location.search).get("favorites") || "";
+  let readOnlyFavoriteShare = false;
   let favoriteClientId = localStorage.getItem(FAVORITE_CLIENT_KEY);
   if (!favoriteClientId || !/^[a-f0-9-]{36}$/i.test(favoriteClientId)) {
     favoriteClientId = crypto.randomUUID();
@@ -113,8 +115,21 @@
     renderCards("sec-attractions", state.places.attractions, "景點");
     renderCards("sec-entertainment", state.places.entertainment, "娛樂");
     renderCards("sec-food", state.places.food, "美食");
-    const legend = document.querySelector("#sec-map .bg-white .flex");
-    if (legend) { legend.replaceChildren(); const all = [...state.places.attractions, ...state.places.entertainment, ...state.places.food]; [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => legend.append(el("span", "inline-flex items-center gap-1.5 bg-slate-100 rounded-full px-2 py-1", category))); }
+    const legend = document.getElementById("map-category-filter");
+    if (legend) {
+      legend.replaceChildren();
+      const all = [...state.places.attractions, ...state.places.entertainment, ...state.places.food];
+      const makeFilter = (label, category) => {
+        const button = el("button", "map-filter-btn" + (category === "all" ? " active" : ""), label);
+        button.type = "button";
+        button.dataset.mapCategory = category;
+        button.setAttribute("aria-pressed", String(category === "all"));
+        button.addEventListener("click", () => { if (typeof filterMapByCategory === "function") filterMapByCategory(category, button); });
+        legend.append(button);
+      };
+      makeFilter("全部", "all");
+      [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => makeFilter(category, category));
+    }
     if (typeof mapLocations !== "undefined") {
       mapLocations.splice(0, mapLocations.length, ...categoryMap());
       if (typeof pinElements !== "undefined") for (const [name, pin] of pinElements) if (!mapLocations.some(place => place.name === name)) { pin.remove(); pinElements.delete(name); }
@@ -159,10 +174,12 @@
       const card = el("div", "bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex gap-2 items-center");
       const favorite = el("button", "favorite-toggle", favorites.has(id) ? "♥" : "♡");
       favorite.type = "button";
-      favorite.setAttribute("aria-label", favorites.has(id) ? "從我的最愛移除" : "加入我的最愛");
+      favorite.disabled = readOnlyFavoriteShare;
+      favorite.setAttribute("aria-label", readOnlyFavoriteShare ? "分享檢視中的最愛" : favorites.has(id) ? "從我的最愛移除" : "加入我的最愛");
       favorite.setAttribute("aria-pressed", String(favorites.has(id)));
       favorite.title = favorites.has(id) ? "從我的最愛移除" : "加入我的最愛";
       favorite.addEventListener("click", () => {
+        if (readOnlyFavoriteShare) return;
         if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
         saveFavorites();
         api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId: id, favorite: favorites.has(id) }) }).catch(error => console.warn("雲端收藏同步失敗：", error.message));
@@ -215,6 +232,20 @@
     makeButton("♡ 我的最愛", "favorites");
     categories.forEach(category => makeButton(category, category));
     applyPlaceFilter(section, activeFilter, datasetKey);
+  }
+
+  function shareFavoritesDialog() {
+    api("/api/favorites/share", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId }) })
+      .then(result => {
+        const shareUrl = new URL(location.pathname, location.origin);
+        shareUrl.searchParams.set("favorites", result.token);
+        showDialog(`<h2 class="text-xl font-bold mb-2">分享我的最愛</h2><p class="text-sm text-slate-500 mb-3">這是唯讀分享連結，有效 30 天。任何取得連結的人都能查看這份收藏清單。</p><label class="edit-label">分享連結<input id="favorite-share-url" class="edit-input" readonly value="${esc(shareUrl.href)}" /></label><p id="share-message" class="text-sm text-slate-500 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>關閉</button><button type="button" id="copy-share-url" class="edit-button">複製連結</button></div>`);
+        document.getElementById("copy-share-url").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(shareUrl.href); document.getElementById("share-message").textContent = "已複製分享連結。"; }
+          catch { const input = document.getElementById("favorite-share-url"); input.focus(); input.select(); document.getElementById("share-message").textContent = "請複製上方連結分享。"; }
+        });
+      })
+      .catch(error => showDialog(`<h2 class="text-xl font-bold mb-2">無法建立分享連結</h2><p class="text-sm text-red-600">${esc(error.message)}</p><div class="flex justify-end mt-5"><button type="button" class="edit-button secondary" data-close>關閉</button></div>`));
   }
 
   function loginDialog() {
@@ -281,7 +312,7 @@
       .editor-panel{width:min(100%,440px);max-height:94vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 20px 60px #0004}.editor-panel.wide{width:min(100%,860px)}
       .edit-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:12px;margin-bottom:12px}.edit-tab{white-space:nowrap;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px;background:#fff;color:#475569;font-size:13px}.edit-tab.active,.edit-button{background:#b91c1c;color:#fff;border:0}
       .edit-button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600}.edit-button.secondary{background:#f1f5f9;color:#334155}.edit-button.danger{background:#fee2e2;color:#b91c1c}.edit-button.tiny{padding:6px 9px;font-size:12px}
-      .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+      .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle:disabled{cursor:default;opacity:.85}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login,.trip-editor-share{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.trip-editor-share{background:#fee2e2;color:#7f1d1d}.shared-favorites-banner{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600}.shared-favorites-banner.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
       @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;border-radius:16px 16px 0 0;padding:16px}.edit-grid{grid-template-columns:1fr}.edit-row{grid-template-columns:1fr 1fr}.edit-row .edit-label:nth-child(3){grid-column:1/-1}.edit-row button{justify-self:start}}
     `; document.head.append(style);
   }
@@ -289,20 +320,42 @@
   async function init() {
     addStyles();
     const header = document.querySelector("header > div");
-    if (header) { const button = el("button", "trip-editor-login", "登入編輯"); button.type = "button"; button.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } }); header.append(button); }
+    if (header && !favoriteShareToken) {
+      const actions = el("div", "flex items-center gap-2");
+      const share = el("button", "trip-editor-share", "分享最愛");
+      share.type = "button"; share.addEventListener("click", shareFavoritesDialog);
+      const login = el("button", "trip-editor-login", "登入編輯");
+      login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
+      actions.append(share, login); header.append(actions);
+    }
     state = captureInitial();
     try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
-    if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
-    try {
-      const remote = await api("/api/favorites?clientId=" + encodeURIComponent(favoriteClientId));
-      const serverFavorites = Array.isArray(remote.favorites) ? remote.favorites : [];
-      for (const id of serverFavorites) favorites.add(id);
-      saveFavorites();
-      const uploads = [...favorites].map(placeId => api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId, favorite: true }) }));
-      await Promise.allSettled(uploads);
-      renderPage();
-    } catch (error) { console.warn("雲端收藏尚未同步：", error.message); }
+    if (token && !favoriteShareToken) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
+    if (favoriteShareToken) {
+      try {
+        const shared = await api("/api/favorites/share?token=" + encodeURIComponent(favoriteShareToken));
+        favorites = new Set(Array.isArray(shared.favorites) ? shared.favorites : []);
+        readOnlyFavoriteShare = true;
+        ["sec-attractions", "sec-entertainment", "sec-food"].forEach(id => filters.set(id, "favorites"));
+        const banner = el("div", "shared-favorites-banner", "正在查看分享的我的最愛（唯讀）");
+        document.querySelector("main")?.prepend(banner);
+        renderPage();
+      } catch (error) {
+        const banner = el("div", "shared-favorites-banner error", error.message || "分享連結無效或已逾期。");
+        document.querySelector("main")?.prepend(banner);
+      }
+    } else {
+      try {
+        const remote = await api("/api/favorites?clientId=" + encodeURIComponent(favoriteClientId));
+        const serverFavorites = Array.isArray(remote.favorites) ? remote.favorites : [];
+        for (const id of serverFavorites) favorites.add(id);
+        saveFavorites();
+        const uploads = [...favorites].map(placeId => api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId, favorite: true }) }));
+        await Promise.allSettled(uploads);
+        renderPage();
+      } catch (error) { console.warn("雲端收藏尚未同步：", error.message); }
+    }
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
