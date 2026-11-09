@@ -14,3 +14,13 @@ CREATE TABLE IF NOT EXISTS place_favorites (
 );
 
 CREATE INDEX IF NOT EXISTS place_favorites_client_idx ON place_favorites(client_hash);
+
+CREATE TABLE IF NOT EXISTS favorite_shares (
+  token_hash TEXT PRIMARY KEY,
+  client_hash TEXT NOT NULL,
+  favorite_ids TEXT NOT NULL,
+  expires INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS favorite_shares_expires_idx ON favorite_shares(expires);
