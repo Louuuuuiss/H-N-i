@@ -15,6 +15,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
+        .map-filter-btn { border:1px solid #e2e8f0; border-radius:999px; padding:5px 10px; background:#fff; color:#475569; cursor:pointer; transition:background .15s,color .15s; }
+        .map-filter-btn.active { background:#b91c1c; color:#fff; border-color:#b91c1c; }
+        .map-filter-btn:focus-visible { outline:2px solid #dc2626; outline-offset:2px; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f8fafc;
@@ -479,12 +482,13 @@
                 互動式地圖
             </h2>
             <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-3 mb-3">
-                <div class="flex flex-wrap gap-x-3 gap-y-2 text-xs text-slate-600">
-                    <span class="inline-flex items-center gap-1.5">🏛 景點</span>
-                    <span class="inline-flex items-center gap-1.5">♨ SPA</span>
-                    <span class="inline-flex items-center gap-1.5">✂ Barbershop</span>
-                    <span class="inline-flex items-center gap-1.5">🍸 Bar／Club</span>
-                    <span class="inline-flex items-center gap-1.5">🍜 美食</span>
+                <div id="map-category-filter" class="flex flex-wrap gap-x-2 gap-y-2 text-xs text-slate-600">
+                    <button type="button" class="map-filter-btn active" data-map-category="all">全部</button>
+                    <button type="button" class="map-filter-btn" data-map-category="景點">🏛 景點</button>
+                    <button type="button" class="map-filter-btn" data-map-category="spa">♨ SPA</button>
+                    <button type="button" class="map-filter-btn" data-map-category="barber">✂ Barbershop</button>
+                    <button type="button" class="map-filter-btn" data-map-category="bar">🍸 Bar</button>
+                    <button type="button" class="map-filter-btn" data-map-category="美食">🍜 美食</button>
                 </div>
             </div>
             <p id="map-status" class="text-xs text-slate-500 mb-2">開啟地圖分頁後載入景點、娛樂與已核實位置的美食地點…</p>
@@ -671,6 +675,7 @@
         let providerIndex = 0;              // 目前優先使用的底圖
         let renderPending = false;
         let selectedPlace = null;
+        let mapCategoryFilter = "all";
         let lastWheelTime = 0;
 
         const tileCache = new Map();        // key "z/x/y" -> <img>
@@ -707,6 +712,22 @@
         function setMapStatus(text) {
             const el = document.getElementById('map-status');
             if (el) el.textContent = text;
+        }
+
+        function filterMapByCategory(category, button) {
+            mapCategoryFilter = category || "all";
+            document.querySelectorAll("#map-category-filter .map-filter-btn").forEach(btn => {
+                const active = btn.dataset.mapCategory === mapCategoryFilter;
+                btn.classList.toggle("active", active);
+                btn.setAttribute("aria-pressed", String(active));
+            });
+            if (selectedPlace && mapCategoryFilter !== "all" && selectedPlace.label !== mapCategoryFilter) closeMapPopup();
+            const shown = mapCategoryFilter === "all" ? mapLocations.length : mapLocations.filter(place => place.label === mapCategoryFilter).length;
+            setMapStatus(mapCategoryFilter === "all"
+                ? "已標示 " + mapLocations.length + " 個地點；拖曳移動、兩指／滾輪／雙擊縮放，點選標記查看連結。"
+                : "顯示「" + mapCategoryFilter + "」" + shown + " 個地點；拖曳移動、兩指／滾輪／雙擊縮放。");
+            if (button) button.blur();
+            queueMapRender();
         }
         function showMapWarning(html) {
             const el = document.getElementById('map-warning');
@@ -815,6 +836,7 @@
                 const pt = latLonToWorld(place.coords[0], place.coords[1], z);
                 pin.style.left = (pt[0] - left) + 'px';
                 pin.style.top = (pt[1] - top) + 'px';
+                pin.style.display = mapCategoryFilter === "all" || place.label === mapCategoryFilter ? "block" : "none";
                 pin.classList.toggle('active', selectedPlace === place);
             });
         }
@@ -866,6 +888,12 @@
         }
 
         function bindMapEvents(map) {
+            map.querySelectorAll(".map-filter-btn").forEach(button => {
+                button.addEventListener("click", event => {
+                    event.stopPropagation();
+                    filterMapByCategory(button.dataset.mapCategory, button);
+                });
+            });
             map.addEventListener('pointerdown', event => {
                 if (event.target.closest('button, a')) return;
                 pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -893,8 +921,8 @@
                     const dist = Math.hypot(a.x - b.x, a.y - b.y), rect = map.getBoundingClientRect();
                     const mx = (a.x + b.x) / 2 - rect.left, my = (a.y + b.y) / 2 - rect.top;
                     if (pinchDist > 0) {
-                        if (dist / pinchDist > 1.5) { zoomAt(mapZoom + 1, mx, my); pinchDist = dist; }
-                        else if (dist / pinchDist < 0.67) { zoomAt(mapZoom - 1, mx, my); pinchDist = dist; }
+                        if (dist / pinchDist > 1.15) { zoomAt(mapZoom + 1, mx, my); pinchDist = dist; }
+                        else if (dist / pinchDist < 0.87) { zoomAt(mapZoom - 1, mx, my); pinchDist = dist; }
                     }
                     dragMoved = true;
                 }
@@ -939,7 +967,7 @@
                 mapIsLoaded = true;
             }
             queueMapRender();
-            setMapStatus('已標示 ' + mapLocations.length + ' 個地點；拖曳移動、滾輪／雙擊／按鈕縮放，點選標記查看連結。');
+            filterMapByCategory(mapCategoryFilter);
         }
 
         function filterEntertainment(type, btn) {
