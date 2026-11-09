@@ -113,6 +113,26 @@ export default {
         return json({ saved: true }, 200, origin);
       }
 
+      if (url.pathname === "/api/favorites" && request.method === "GET") {
+        const clientId = url.searchParams.get("clientId") || "";
+        if (!/^[a-f0-9-]{36}$/i.test(clientId)) return json({ error: "識別碼不正確。" }, 400, origin);
+        const clientHash = await hmac(clientId, env.AUTH_SECRET);
+        const rows = await env.DB.prepare("SELECT place_id FROM place_favorites WHERE client_hash = ?").bind(clientHash).all();
+        return json({ favorites: (rows.results || []).map(row => row.place_id) }, 200, origin);
+      }
+
+      if (url.pathname === "/api/favorites" && request.method === "POST") {
+        const body = await request.json().catch(() => null);
+        if (!body || !/^[a-f0-9-]{36}$/i.test(String(body.clientId || "")) || typeof body.placeId !== "string" || body.placeId.length > 1000 || typeof body.favorite !== "boolean") return json({ error: "收藏資料格式不正確。" }, 400, origin);
+        const clientHash = await hmac(body.clientId, env.AUTH_SECRET);
+        if (body.favorite) {
+          await env.DB.prepare("INSERT INTO place_favorites(client_hash, place_id) VALUES(?, ?) ON CONFLICT(client_hash, place_id) DO NOTHING").bind(clientHash, body.placeId).run();
+        } else {
+          await env.DB.prepare("DELETE FROM place_favorites WHERE client_hash = ? AND place_id = ?").bind(clientHash, body.placeId).run();
+        }
+        return json({ saved: true }, 200, origin);
+      }
+
       if (url.pathname === "/api/logout" && request.method === "POST") {
         const authorization = request.headers.get("Authorization") || "";
         const match = authorization.match(/^Bearer ([a-f0-9]{64})$/i);
