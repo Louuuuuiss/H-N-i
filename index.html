@@ -283,6 +283,7 @@
                 <i class="fa-solid fa-map-location-dot text-blue-600"></i>
                 景點推薦
             </h2>
+            <div class="place-filters flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1"></div>
             <div class="space-y-2.5">
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
                         <div class="pr-2">
@@ -370,7 +371,7 @@
                 <i class="fa-solid fa-martini-glass-citrus text-purple-600"></i>
                 娛樂推薦
             </h2>
-            <div class="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+            <div class="place-filters flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
                 <button onclick="filterEntertainment('all', this)" class="ent-btn active bg-red-600 text-white text-xs px-3 py-1.5 rounded-full font-medium shrink-0">全部</button>
                 <button onclick="filterEntertainment('spa', this)" class="ent-btn bg-white text-slate-600 border border-slate-200 text-xs px-3 py-1.5 rounded-full font-medium shrink-0">SPA／Massage</button>
                 <button onclick="filterEntertainment('barber', this)" class="ent-btn bg-white text-slate-600 border border-slate-200 text-xs px-3 py-1.5 rounded-full font-medium shrink-0">Barbershop</button>
@@ -459,7 +460,7 @@
             </h2>
 
             <!-- Michelin Category Filter Tabs -->
-            <div class="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+            <div class="place-filters flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
                 <button onclick="filterMichelin('all', this)" class="mich-btn active bg-red-600 text-white text-xs px-3 py-1.5 rounded-full font-medium shrink-0">全部</button>
                 <button onclick="filterMichelin('star', this)" class="mich-btn bg-white text-slate-600 border border-slate-200 text-xs px-3 py-1.5 rounded-full font-medium shrink-0">⭐ 一星 (4)</button>
                 <button onclick="filterMichelin('bib', this)" class="mich-btn bg-white text-slate-600 border border-slate-200 text-xs px-3 py-1.5 rounded-full font-medium shrink-0">🍲 必比登 (22)</button>
