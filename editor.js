@@ -4,7 +4,7 @@
   const FAVORITES_KEY = "hanoi-trip-favorites-v1";
   const FAVORITE_CLIENT_KEY = "hanoi-trip-favorites-client-v1";
   const favoriteShareToken = new URLSearchParams(location.search).get("favorites") || "";
-  let readOnlyFavoriteShare = false;
+  let readOnlyFavoriteShare = Boolean(favoriteShareToken);
   let favoriteClientId = localStorage.getItem(FAVORITE_CLIENT_KEY);
   if (!favoriteClientId || !/^[a-f0-9-]{36}$/i.test(favoriteClientId)) {
     favoriteClientId = crypto.randomUUID();
