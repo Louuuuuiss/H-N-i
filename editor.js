@@ -235,7 +235,7 @@
   }
 
   function shareFavoritesDialog() {
-    api("/api/favorites/share", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId }) })
+    api("/api/favorites/share", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, favorites: [...favorites] }) })
       .then(result => {
         const shareUrl = new URL(location.pathname, location.origin);
         shareUrl.searchParams.set("favorites", result.token);
