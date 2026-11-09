@@ -1,6 +1,11 @@
 (() => {
   const API = window.TRIP_API_URL || "";
   const TOKEN_KEY = "hanoi-trip-editor-token";
+  const FAVORITES_KEY = "hanoi-trip-favorites-v1";
+  let favorites;
+  try { favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")); }
+  catch { favorites = new Set(); }
+  const filters = new Map();
   const labels = { attractions: "景點", entertainment: "娛樂", food: "美食" };
   const colors = { attractions: ["景點", "#2563eb", "🏛"], entertainment: ["娛樂", "#9333ea", "♨"], food: ["美食", "#dc2626", "🍜"] };
   let state;
@@ -111,38 +116,98 @@
     }
   }
 
+  function favoriteId(sectionId, item) {
+    return sectionId + ":" + JSON.stringify([
+      String(item.name || "").trim().toLocaleLowerCase(),
+      (safeUrl(item.url) || "").toLocaleLowerCase()
+    ]);
+  }
+
+  function saveFavorites() {
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites])); } catch {}
+  }
+
+  function applyPlaceFilter(section, filter, datasetKey) {
+    section.querySelectorAll(".place-item").forEach(wrapper => {
+      const isFavorite = favorites.has(wrapper.dataset.favoriteId);
+      const visible = filter === "favorites"
+        ? isFavorite
+        : filter === "all" || wrapper.dataset[datasetKey] === filter;
+      wrapper.classList.toggle("hidden", !visible);
+    });
+  }
+
   function renderCards(sectionId, items, badge) {
     const section = document.getElementById(sectionId); if (!section) return;
     const list = sectionId === "sec-entertainment" ? document.getElementById("entertainment-items") : sectionId === "sec-food" ? document.getElementById("michelin-list") : section.querySelector(".space-y-2\\.5");
     if (!list) return;
     list.replaceChildren();
     for (const item of items) {
-      const card = el("div", "bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center");
-      const detail = el("div", "pr-2"); detail.append(el("h3", "font-bold text-sm text-slate-800", item.name), el("p", "text-xs text-slate-500 mt-0.5", item.description));
+      const id = favoriteId(sectionId, item);
+      const categoryKey = sectionId === "sec-food" ? "foodCategory" : sectionId === "sec-entertainment" ? "entCategory" : "placeCategory";
+      const category = item.category || "未分類";
+      const wrapper = el("div", "place-item");
+      wrapper.dataset.favoriteId = id;
+      wrapper.dataset[categoryKey] = category;
+
+      const card = el("div", "bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex gap-2 items-center");
+      const favorite = el("button", "favorite-toggle", favorites.has(id) ? "♥" : "♡");
+      favorite.type = "button";
+      favorite.setAttribute("aria-label", favorites.has(id) ? "從我的最愛移除" : "加入我的最愛");
+      favorite.setAttribute("aria-pressed", String(favorites.has(id)));
+      favorite.title = favorites.has(id) ? "從我的最愛移除" : "加入我的最愛";
+      favorite.addEventListener("click", () => {
+        if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+        saveFavorites();
+        const active = favorites.has(id);
+        favorite.textContent = active ? "♥" : "♡";
+        favorite.classList.toggle("is-favorite", active);
+        favorite.setAttribute("aria-label", active ? "從我的最愛移除" : "加入我的最愛");
+        favorite.setAttribute("aria-pressed", String(active));
+        favorite.title = active ? "從我的最愛移除" : "加入我的最愛";
+        if (filters.get(sectionId) === "favorites") applyPlaceFilter(section, "favorites", categoryKey);
+      });
+      favorite.classList.toggle("is-favorite", favorites.has(id));
+
+      const detail = el("div", "flex-1 min-w-0 pr-2"); detail.append(el("h3", "font-bold text-sm text-slate-800", item.name), el("p", "text-xs text-slate-500 mt-0.5", item.description));
       const link = el("a", "text-[11px] px-2 py-1 rounded-md shrink-0 bg-blue-100 text-blue-800 inline-flex items-center gap-1 hover:brightness-95 transition", item.category || badge);
-      link.href = safeUrl(item.url) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name)}`; link.target = "_blank"; link.rel = "noopener noreferrer";
-      card.append(detail, link);
-      if (sectionId === "sec-entertainment" || sectionId === "sec-food") { const wrapper = el("div", sectionId === "sec-food" ? "food-item" : "ent-item"); wrapper.dataset[sectionId === "sec-food" ? "foodCategory" : "entCategory"] = item.category || "未分類"; wrapper.append(card); list.append(wrapper); }
-      else list.append(card);
+      link.href = safeUrl(item.url) || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(item.name); link.target = "_blank"; link.rel = "noopener noreferrer";
+      card.append(favorite, detail, link);
+      wrapper.append(card);
+      list.append(wrapper);
     }
-    if (sectionId === "sec-entertainment" || sectionId === "sec-food") renderFilters(section, items, sectionId === "sec-food" ? "foodCategory" : "entCategory", sectionId === "sec-food" ? "mich-btn" : "ent-btn");
+    const datasetKey = sectionId === "sec-food" ? "foodCategory" : sectionId === "sec-entertainment" ? "entCategory" : "placeCategory";
+    const filterClass = sectionId === "sec-food" ? "mich-btn" : sectionId === "sec-entertainment" ? "ent-btn" : "place-btn";
+    renderFilters(section, items, datasetKey, filterClass);
   }
 
   function renderFilters(section, items, datasetKey, className) {
-    const holder = section.querySelector(".flex.gap-2.mb-4"); if (!holder) return;
+    const holder = section.querySelector(".place-filters"); if (!holder) return;
     holder.replaceChildren();
     const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
+    const activeFilter = filters.get(section.id) || "all";
     const makeButton = (name, category) => {
-      const button = el("button", `${className} ${category === "all" ? "active bg-red-600 text-white" : "bg-white text-slate-600 border border-slate-200"} text-xs px-3 py-1.5 rounded-full font-medium shrink-0`, name);
+      const button = el("button", `${className} ${category === activeFilter ? "active bg-red-600 text-white" : "bg-white text-slate-600 border border-slate-200"} text-xs px-3 py-1.5 rounded-full font-medium shrink-0`, name);
       button.type = "button";
+      button.setAttribute("aria-pressed", String(category === activeFilter));
       button.addEventListener("click", () => {
-        holder.querySelectorAll("button").forEach(b => { b.classList.remove("bg-red-600", "text-white", "active"); b.classList.add("bg-white", "text-slate-600"); });
-        button.classList.add("bg-red-600", "text-white", "active"); button.classList.remove("bg-white", "text-slate-600");
-        section.querySelectorAll(datasetKey === "foodCategory" ? ".food-item" : ".ent-item").forEach(card => card.classList.toggle("hidden", category !== "all" && card.dataset[datasetKey] !== category));
+        filters.set(section.id, category);
+        holder.querySelectorAll("button").forEach(b => {
+          b.classList.remove("bg-red-600", "text-white", "active");
+          b.classList.add("bg-white", "text-slate-600");
+          b.setAttribute("aria-pressed", "false");
+        });
+        button.classList.add("bg-red-600", "text-white", "active");
+        button.classList.remove("bg-white", "text-slate-600");
+        button.setAttribute("aria-pressed", "true");
+        applyPlaceFilter(section, category, datasetKey);
       });
       holder.append(button);
     };
-    makeButton("全部", "all"); categories.forEach(category => makeButton(category, category));
+    makeButton("全部", "all");
+    makeButton("♡ 我的最愛", "favorites");
+    categories.forEach(category => makeButton(category, category));
+    applyPlaceFilter(section, activeFilter, datasetKey);
   }
 
   function loginDialog() {
@@ -209,7 +274,7 @@
       .editor-panel{width:min(100%,440px);max-height:94vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 20px 60px #0004}.editor-panel.wide{width:min(100%,860px)}
       .edit-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:12px;margin-bottom:12px}.edit-tab{white-space:nowrap;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px;background:#fff;color:#475569;font-size:13px}.edit-tab.active,.edit-button{background:#b91c1c;color:#fff;border:0}
       .edit-button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600}.edit-button.secondary{background:#f1f5f9;color:#334155}.edit-button.danger{background:#fee2e2;color:#b91c1c}.edit-button.tiny{padding:6px 9px;font-size:12px}
-      .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.trip-editor-login{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+      .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
       @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;border-radius:16px 16px 0 0;padding:16px}.edit-grid{grid-template-columns:1fr}.edit-row{grid-template-columns:1fr 1fr}.edit-row .edit-label:nth-child(3){grid-column:1/-1}.edit-row button{justify-self:start}}
     `; document.head.append(style);
   }
