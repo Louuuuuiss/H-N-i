@@ -120,9 +120,37 @@
     const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration;
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
+      let dayPicker = document.getElementById("trip-day-picker");
+      if (!dayPicker) {
+        dayPicker = el("div", "trip-day-picker");
+        dayPicker.id = "trip-day-picker";
+        const heading = itinerary.querySelector("h2");
+        if (heading) heading.insertAdjacentElement("afterend", dayPicker);
+        else itinerary.prepend(dayPicker);
+      }
+      dayPicker.replaceChildren();
+      state.days.forEach((day, index) => {
+        const button = el("button", "trip-day-choice" + (index === 0 ? " active" : ""));
+        button.type = "button";
+        button.setAttribute("aria-label", `前往第 ${index + 1} 天：${day.date || "日期待填"}`);
+        button.setAttribute("aria-pressed", String(index === 0));
+        button.append(el("span", "trip-day-number", `DAY ${index + 1}`), el("strong", "trip-day-date", day.date || "日期待填"));
+        if (day.destination) button.append(el("span", "trip-day-destination", day.destination));
+        button.addEventListener("click", () => {
+          const card = itinerary.querySelector(`.trip-day[data-day-index="${index}"]`);
+          card?.scrollIntoView({ behavior: "smooth", block: "start" });
+          dayPicker.querySelectorAll(".trip-day-choice").forEach((choice, choiceIndex) => {
+            const active = choiceIndex === index;
+            choice.classList.toggle("active", active);
+            choice.setAttribute("aria-pressed", String(active));
+          });
+        });
+        dayPicker.append(button);
+      });
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
       state.days.forEach((day, index) => {
         const card = el("article", "trip-day bg-white rounded-xl shadow-sm border border-slate-100 mb-4 overflow-hidden");
+        card.dataset.dayIndex = String(index);
         const head = el("div", "bg-slate-800 text-white px-4 py-2.5 flex justify-between items-center");
         head.append(el("span", "font-bold text-sm", `DAY ${index + 1} · ${day.date || "日期待填"}`), el("span", "text-xs bg-slate-700 px-2 py-0.5 rounded", day.destination));
         const body = el("div", "p-4 space-y-3");
@@ -430,6 +458,56 @@
       button:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.edit-button.secondary{background:#f1f5f9;color:#334155}.edit-button.danger{background:#fee2e2;color:#b91c1c}.edit-button.tiny{padding:6px 9px;font-size:12px}
       .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.time-wheel-group{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:end;min-width:250px}.time-range-separator{padding-bottom:10px;color:#64748b;font-weight:700}.edit-row>.time-wheel-group{grid-column:1/-1}@media(min-width:641px){.edit-row{grid-template-columns:minmax(250px,1.5fr) 1.2fr 1.5fr auto}.edit-row>.time-wheel-group{grid-column:auto}}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle:disabled{cursor:default;opacity:.85}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login,.trip-editor-share{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.trip-editor-share{background:#fee2e2;color:#7f1d1d}.shared-favorites-banner{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600}.shared-favorites-banner.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
       @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;border-radius:16px 16px 0 0;padding:16px}.edit-grid{grid-template-columns:1fr}.edit-row{grid-template-columns:1fr 1fr}.edit-row .edit-label:nth-child(3){grid-column:1/-1}.edit-row button{justify-self:start}}
+      /* Travel planner refresh: preserve Hanoi content and features while refining the layout. */
+      :root{--trip-teal:#168f91;--trip-teal-dark:#126f73;--trip-ink:#173b40;--trip-canvas:#f4f8f7;--trip-line:#dcebea}
+      html{scroll-behavior:smooth;scroll-padding-top:92px}
+      body{background:var(--trip-canvas)!important;color:var(--trip-ink)!important;padding-bottom:88px!important}
+      header.sticky{background:#fff!important;color:var(--trip-ink)!important;border-bottom:1px solid var(--trip-line);box-shadow:0 5px 18px rgba(18,65,68,.06)!important}
+      header .text-red-100{color:#789395!important}
+      header span.bg-red-800{background:#eaf6f5!important;color:var(--trip-teal-dark)!important}
+      header h1{letter-spacing:.01em}
+      .trip-editor-login,.trip-editor-share{border:1px solid #c9e3e1!important;background:#f2fbfa!important;color:var(--trip-teal-dark)!important;padding:9px 13px!important;box-shadow:0 2px 8px rgba(22,143,145,.08)}
+      main.max-w-md{max-width:780px!important;padding:22px 18px 32px!important}
+      .tab-content>h2{color:var(--trip-ink)!important;font-size:1.2rem!important;margin-bottom:16px!important}
+      .tab-content>h2 i{color:var(--trip-teal)!important}
+      #trip-day-picker{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 16px;margin:0 0 8px;scrollbar-width:none;scroll-snap-type:x mandatory}
+      #trip-day-picker::-webkit-scrollbar{display:none}
+      .trip-day-choice{flex:0 0 104px;min-height:112px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;padding:13px 14px;border:1px solid transparent;border-radius:19px;background:#eaf2f1;color:#50696b;text-align:left;scroll-snap-align:start}
+      .trip-day-choice .trip-day-number{font-size:10px;letter-spacing:.13em;font-weight:800}
+      .trip-day-choice .trip-day-date{font-family:Georgia,serif;font-size:24px;line-height:1.05;color:#29484a}
+      .trip-day-choice .trip-day-destination{max-width:100%;font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .trip-day-choice.active{background:var(--trip-teal);color:#fff;box-shadow:0 9px 20px rgba(22,143,145,.2)}
+      .trip-day-choice.active .trip-day-date{color:#fff}
+      .trip-day{scroll-margin-top:92px;border:1px solid var(--trip-line)!important;border-radius:20px!important;box-shadow:0 5px 18px rgba(28,71,73,.055)!important;margin-bottom:16px!important}
+      .trip-day>div:first-child{background:#fff!important;color:var(--trip-ink)!important;border-bottom:1px solid #edf3f2;padding:14px 17px!important}
+      .trip-day>div:first-child span:first-child{font-size:14px!important;color:var(--trip-teal-dark)}
+      .trip-day>div:first-child span:last-child{background:#eaf6f5!important;color:#477577!important}
+      .trip-day>.p-4{padding:18px!important}
+      .trip-day .p-4>.flex{position:relative;gap:13px!important;padding:0 0 14px 14px!important;margin-left:6px;border-bottom:0!important}
+      .trip-day .p-4>.flex:before{content:"";position:absolute;left:-5px;top:5px;width:10px;height:10px;border:2px solid #fff;border-radius:50%;background:var(--trip-teal);box-shadow:0 0 0 2px #b9dfdc}
+      .trip-day .p-4>.flex:after{content:"";position:absolute;left:-1px;top:19px;bottom:-1px;width:2px;background:#cce5e2}
+      .trip-day .p-4>.flex:last-child{padding-bottom:0!important}
+      .trip-day .p-4>.flex:last-child:after{display:none}
+      .trip-day .p-4>.flex>span:first-child{font-size:12px!important;min-width:90px;text-align:center;border-radius:999px!important;background:#e9f6f5!important;color:var(--trip-teal-dark)!important;padding:5px 9px!important}
+      .trip-day .p-4>.flex>div{min-width:0;padding-top:3px}
+      .place-filters{flex-wrap:wrap!important;overflow:visible!important;gap:8px!important;padding-bottom:10px}
+      .place-filters button,.map-filter-btn{min-height:36px;padding:7px 13px!important;border-radius:999px!important;white-space:nowrap}
+      .place-filters button.active,.map-filter-btn.active{background:var(--trip-teal)!important;border-color:var(--trip-teal)!important;color:#fff!important}
+      .place-item>div{min-height:72px;padding:14px!important;border-radius:17px!important;border-color:#e4eeed!important;box-shadow:0 3px 12px rgba(28,71,73,.045)!important;transition:transform .16s ease,box-shadow .16s ease}
+      .place-item>div:hover{transform:translateY(-1px);box-shadow:0 7px 18px rgba(28,71,73,.09)!important}
+      .place-item h3{font-size:14px!important;color:var(--trip-ink)!important}
+      .favorite-toggle{width:36px;height:36px;background:#f4f7f7;color:#9baaaa}
+      .favorite-toggle.is-favorite{background:#fff0f0}
+      #sec-map>div.bg-white{border-radius:18px!important;border-color:var(--trip-line)!important;padding:14px!important}
+      #travel-map{border-radius:20px!important;box-shadow:0 5px 18px rgba(28,71,73,.08)}
+      nav.fixed.bottom-0{border-color:#e6efee!important;box-shadow:0 -6px 22px rgba(22,55,57,.07);padding-bottom:env(safe-area-inset-bottom,0)}
+      nav.fixed.bottom-0>div{max-width:780px!important;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0))!important}
+      nav .nav-btn{min-height:52px;border-radius:14px;transition:background .15s,color .15s}
+      nav .nav-btn.active{color:var(--trip-teal)!important;background:#eaf6f5}
+      nav .nav-btn:not(.active){color:#93a2a3!important}
+      button:not(:disabled){transition:transform .12s ease,filter .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent}
+      button:not(:disabled):active{transform:scale(.96);filter:brightness(.91);box-shadow:inset 0 2px 5px rgba(15,23,42,.16)}
+      @media(max-width:640px){main.max-w-md{padding:18px 14px 28px!important}.trip-day-choice{flex-basis:96px;min-height:104px}.trip-day .p-4>.flex>span:first-child{min-width:82px}.place-item>div{padding:12px!important}}
     `; document.head.append(style);
   }
 
