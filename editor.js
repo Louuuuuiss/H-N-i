@@ -343,17 +343,16 @@
     }
     return options;
   }
-  function timePointEditor(index, part, values, label) {
-    const base = 'days.' + index + '.items.' + part;
-    return '<div class="time-point"><strong>' + label + '</strong><div class="time-units">' +
-      '<label>時<select class="edit-input time-wheel" aria-label="' + label + '小時" name="' + base + 'Hour">' + timeUnitOptions(23, values[0]) + '</select></label>' +
-      '<label>分<select class="edit-input time-wheel" aria-label="' + label + '分鐘" name="' + base + 'Minute">' + timeUnitOptions(59, values[1]) + '</select></label>' +
-      '<label>秒<select class="edit-input time-wheel" aria-label="' + label + '秒數" name="' + base + 'Second">' + timeUnitOptions(59, values[2]) + '</select></label>' +
+  function timePointEditor(dayIndex, itemIndex, endpoint, values, label) {
+    const base = 'days.' + dayIndex + '.items.' + itemIndex + '.' + endpoint;
+    return '<div class="time-point"><strong>' + label + '時間</strong><div class="time-units">' +
+      '<label>時<select class="edit-input time-wheel" aria-label="' + label + '時間小時" name="' + base + 'Hour">' + timeUnitOptions(23, values[0]) + '</select></label>' +
+      '<label>分<select class="edit-input time-wheel" aria-label="' + label + '時間分鐘" name="' + base + 'Minute">' + timeUnitOptions(59, values[1]) + '</select></label>' +
       '</div></div>';
   }
   function tabContents() {
     if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
-    if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${(() => { const range = readTimePair(item.time); return range ? `<div class="time-wheel-group">${timePointEditor(i, j, range.start, "開始")}${timePointEditor(i, j, range.end, "結束")}</div>` : input("時間", `days.${i}.items.${j}.time`, item.time, "text", "例如 09:00-10:00"); })()}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+    if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${(() => { const range = readTimePair(item.time); return range ? `<div class="time-wheel-group">${timePointEditor(i, j, "start", range.start, "開始")}${timePointEditor(i, j, "end", range.end, "結束")}</div>` : input("時間", `days.${i}.items.${j}.time`, item.time, "text", "例如 09:00-10:00"); })()}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -411,7 +410,7 @@
       if (date) state.days[i].date = calendarDateText(String(date));
       for (let j = 0; j < state.days[i].items.length; j++) {
         const path = "days." + i + ".items." + j;
-        const units = part => ["Hour", "Minute", "Second"].map(unit => data.get(path + "." + part + unit));
+        const units = part => ["Hour", "Minute"].map(unit => data.get(path + "." + part + unit));
         const start = units("start"), end = units("end");
         if (start.every(value => value !== null) && end.every(value => value !== null)) {
           state.days[i].items[j].time = start.join(":") + "-" + end.join(":");
@@ -425,7 +424,7 @@
       .editor-overlay{position:fixed;inset:0;z-index:1000;background:#0f172a99;display:flex;align-items:center;justify-content:center;padding:12px}
       .editor-panel{width:min(100%,440px);max-height:94vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 20px 60px #0004}.editor-panel.wide{width:min(100%,860px)}
       .edit-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:12px;margin-bottom:12px}.edit-tab{white-space:nowrap;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px;background:#fff;color:#475569;font-size:13px}.edit-tab.active,.edit-button{background:#b91c1c;color:#fff;border:0}
-      .edit-button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600}.time-wheel{min-height:42px;appearance:auto}.time-wheel-group{display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-column:1/-1;min-width:0}.time-point{border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:9px}.time-point>strong{display:block;font-size:12px;color:#475569;margin-bottom:6px}.time-units{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.time-units label{font-size:10px;color:#64748b;display:flex;flex-direction:column;gap:3px}.time-units .edit-input{padding:7px 4px;text-align:center}@media(max-width:640px){.time-wheel-group{grid-template-columns:1fr}.time-point{padding:8px}.time-units{gap:8px}}
+      .edit-button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600}.time-wheel{min-height:42px;appearance:auto}.time-wheel-group{display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-column:1/-1;min-width:0}.time-point{border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:9px}.time-point>strong{display:block;font-size:12px;color:#475569;margin-bottom:6px}.time-units{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.time-units label{font-size:10px;color:#64748b;display:flex;flex-direction:column;gap:3px}.time-units .edit-input{padding:7px 4px;text-align:center}@media(max-width:640px){.time-wheel-group{grid-template-columns:1fr}.time-point{padding:8px}.time-units{gap:8px}}
       button:not(:disabled){transition:transform .12s ease,filter .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent}
       button:not(:disabled):active{transform:scale(.96);filter:brightness(.91);box-shadow:inset 0 2px 5px rgba(15,23,42,.22)}
       button:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.edit-button.secondary{background:#f1f5f9;color:#334155}.edit-button.danger{background:#fee2e2;color:#b91c1c}.edit-button.tiny{padding:6px 9px;font-size:12px}
