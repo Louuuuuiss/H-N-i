@@ -12,6 +12,7 @@
   let state;
   let activeTab = "days";
   let activeDayIndex = 0;
+  let activeDayFilter = "全部行程";
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
 
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -111,6 +112,17 @@
     })));
   }
 
+  function itineraryCategory(item) {
+    if (item.category) return String(item.category);
+    const source = (String(item.title || "") + " " + String(item.description || "")).toLocaleLowerCase();
+    if (/早餐|午餐|晚餐|宵夜|餐廳|咖啡|河粉|美食|用餐|餐飲|吃飯|飲料|啤酒|餐點/.test(source)) return "美食";
+    if (/飯店|酒店|旅館|住宿|check[ -]?in|check[ -]?out|入住|退房/.test(source)) return "住宿";
+    if (/spa|按摩|酒吧|夜店|ktv|club|娛樂|夜市|夜逛|購物|barber|水療|休閒/.test(source)) return "娛樂";
+    if (/景點|參觀|寺|湖|洞|島|古蹟|博物館|公園|教堂|探索|觀景|散步|市場/.test(source)) return "景點";
+    if (/交通|航班|機場|巴士|搭機|機票|前往|移動|接送|入境|登機|車站|碼頭|集合|登船|返回|返程|飛往|高鐵|火車|租車|計程車|taxi|grab/.test(source)) return "交通";
+    return "其他";
+  }
+
   function renderPage() {
     if (!state) return;
     const savedPageScroll = window.scrollY;
@@ -145,19 +157,39 @@
         dayPicker.append(button);
       });
 
+      let dayFilters = document.getElementById("trip-day-filters");
+      if (!dayFilters) {
+        dayFilters = el("div", "trip-day-filters");
+        dayFilters.id = "trip-day-filters";
+        const heading = itinerary.querySelector("h2");
+        if (heading) heading.insertAdjacentElement("afterend", dayFilters);
+        else itinerary.prepend(dayFilters);
+      }
+      const selectedDay = state.days[activeDayIndex];
+      const items = selectedDay?.items || [];
+      const presentCategories = new Set(items.map(itineraryCategory));
+      const filterCategories = ["全部行程", "交通", "景點", "娛樂", "美食", ...[...presentCategories].filter(category => !["交通", "景點", "娛樂", "美食", "其他"].includes(category))];
+      dayFilters.replaceChildren();
+      filterCategories.forEach(category => {
+        const active = category === activeDayFilter;
+        const button = el("button", "trip-day-filter" + (active ? " active" : ""), category);
+        button.type = "button";
+        button.setAttribute("aria-pressed", String(active));
+        button.addEventListener("click", () => { activeDayFilter = category; renderPage(); });
+        dayFilters.append(button);
+      });
+      const visibleItems = items.filter(item => activeDayFilter === "全部行程" || itineraryCategory(item) === activeDayFilter);
+
       let overview = document.getElementById("trip-day-overview");
       if (!overview) {
         overview = el("div", "trip-day-overview");
         overview.id = "trip-day-overview";
-        const heading = itinerary.querySelector("h2");
-        if (heading) heading.insertAdjacentElement("afterend", overview);
-        else itinerary.prepend(overview);
+        dayFilters.insertAdjacentElement("afterend", overview);
       }
-      const selectedDay = state.days[activeDayIndex];
       overview.replaceChildren();
       const overviewCopy = el("div");
-      overviewCopy.append(el("span", "trip-day-full-date", selectedDay?.date || "日期待填"), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
-      overview.append(overviewCopy, el("span", "trip-day-count", (selectedDay?.items?.length || 0) + " 個行程"));
+      overviewCopy.append(el("span", "trip-day-full-date", (selectedDay?.date || "日期待填") + "　·　DAY " + (activeDayIndex + 1)), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
+      overview.append(overviewCopy, el("span", "trip-day-count", visibleItems.length + " 個行程"));
 
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
       if (selectedDay) {
@@ -166,12 +198,17 @@
         const head = el("div", "trip-day-heading");
         head.append(el("span", "", "DAY " + (activeDayIndex + 1) + " · " + (selectedDay.date || "日期待填")), el("span", "trip-day-destination", selectedDay.destination || ""));
         const body = el("div", "trip-day-timeline");
-        selectedDay.items.forEach(item => {
+        visibleItems.forEach(item => {
           const row = el("div", "trip-entry");
           const range = String(item.time || "").split(/[-~～]/);
           row.append(el("time", "trip-entry-time", range[0] || item.time || ""));
           const detail = el("div", "trip-entry-card");
-          detail.append(el("p", "trip-entry-title", item.title), el("p", "trip-entry-description", item.description));
+          const top = el("div", "trip-entry-top");
+          top.append(el("h3", "trip-entry-title", item.title));
+          const category = itineraryCategory(item);
+          const icons = { "交通": "✈️", "景點": "📍", "娛樂": "♨️", "美食": "🍜", "住宿": "🛏️", "其他": "✨" };
+          top.append(el("span", "trip-entry-kind", (icons[category] || "✨") + " " + category));
+          detail.append(top, el("p", "trip-entry-description", item.description));
           if (range.length > 1 && range[1]) detail.append(el("span", "trip-entry-range", range[0] + "–" + range[1]));
           row.append(detail);
           body.append(row);
@@ -559,6 +596,27 @@
       .trip-entry-description{margin:0;color:#819198;font-size:12px;line-height:1.65}
       .trip-entry-range{display:inline-flex;margin-top:11px;padding:5px 8px;border-radius:9px;background:#edf8f7;color:#307a78;font-size:10px}
       @media(max-width:640px){header.sticky>div:first-child{padding:20px 18px 10px!important}#trip-day-picker{padding-left:18px;padding-right:18px}.trip-entry{grid-template-columns:42px minmax(0,1fr);gap:14px}.trip-day-timeline:before{left:48px}.trip-entry:before{left:43px}.trip-entry-card{padding:14px}}
+      /* Make the live page follow the preview's compact travel-app frame and filter row. */
+      body{max-width:480px;margin:0 auto;background:#eaf0ef!important;box-shadow:0 0 45px rgba(36,60,59,.1)}
+      header.sticky{max-width:480px!important}
+      .trip-eyebrow{display:block;margin-bottom:5px;color:#198e8b;font-size:10px;letter-spacing:.18em;font-weight:800}
+      header.sticky>div:first-child>div{min-width:0}
+      header.sticky>div:first-child h1{margin:0 0 3px}
+      header.sticky span.bg-red-800{border:1px solid #b6e0dd;border-radius:999px;padding:9px 12px!important;background:#f8ffff!important;color:#257a78!important;font-size:11px}
+      #trip-day-picker{padding:12px 18px 15px}
+      .trip-day-choice{flex-basis:66px;min-height:88px}
+      #sec-itinerary>h2{display:none}
+      #trip-day-filters{display:flex;flex-wrap:wrap;gap:6px;padding:14px 18px 12px}
+      .trip-day-filter{border:1px solid #dceceb;border-radius:999px;background:#fff;padding:8px 12px;color:#61767b;font-size:11px;white-space:nowrap}
+      .trip-day-filter.active{background:#198e8b;border-color:#198e8b;color:#fff;box-shadow:0 4px 10px rgba(25,142,139,.25)}
+      .trip-day-overview{margin:12px 2px 18px}
+      .trip-day-title{font-size:18px}
+      .trip-entry-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+      .trip-entry-title{min-width:0}
+      .trip-entry-kind{flex:0 0 auto;max-width:42%;padding:6px 8px;border-radius:9px;background:#edf8f7;color:#307a78;font-size:10px;white-space:nowrap}
+      nav.fixed.bottom-0{max-width:480px!important;left:50%!important;right:auto!important;width:min(100%,480px)!important;transform:translateX(-50%)}
+      nav.fixed.bottom-0>div{max-width:480px!important}
+      nav .nav-btn{font-size:10px}
       @media(min-width:700px){header.sticky{max-width:480px;margin:0 auto;border-radius:26px 26px 0 0}}
     `; document.head.append(style);
   }
@@ -589,6 +647,8 @@
       const login = el("button", "trip-editor-login", "登入編輯");
       login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
       actions.append(login); header.append(actions);
+      const h1 = header.querySelector("h1");
+      if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
     }
     state = captureInitial();
     try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; renderPage(); } }
