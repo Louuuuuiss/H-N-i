@@ -828,12 +828,18 @@
                 if (!pin) {
                     pin = document.createElement('button');
                     pin.type = 'button'; pin.className = 'map-pin'; pin.title = place.name;
-                    pin.setAttribute('aria-label', place.displayLabel + '：' + place.name);
-                    pin.innerHTML = '<span style="background:' + place.color + '"><b>' + place.symbol + '</b></span>';
-                    pin.addEventListener('click', event => { event.stopPropagation(); showMapPopup(place); });
+                    pin.innerHTML = '<span><b></b></span>';
+                    pin.addEventListener('click', event => { event.stopPropagation(); showMapPopup(pin.mapPlace); });
                     markers.appendChild(pin);
                     pinElements.set(place.name, pin);
                 }
+                pin.title = place.name;
+                pin.mapPlace = place;
+                pin.setAttribute('aria-label', place.displayLabel + '：' + place.name);
+                const pinFace = pin.querySelector('span');
+                const pinIcon = pin.querySelector('b');
+                if (pinFace) pinFace.style.background = place.color;
+                if (pinIcon) pinIcon.textContent = place.symbol;
                 const pt = latLonToWorld(place.coords[0], place.coords[1], z);
                 let pinX = pt[0] - left, pinY = pt[1] - top;
                 const isVisible = mapCategoryFilter === "all" || place.label === mapCategoryFilter;
