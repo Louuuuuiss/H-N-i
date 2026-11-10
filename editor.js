@@ -635,28 +635,14 @@
     const match = first.match(/^(\d{1,2}):(\d{2})/);
     return match ? [match[1].padStart(2, "0"), match[2]] : ["09", "00"];
   }
-  function timeUnitOptions(max, selected) {
-    let options = '';
-    for (let n = 0; n <= max; n++) {
-      const value = String(n).padStart(2, '0');
-      options += '<option value="' + value + '"' + (value === selected ? ' selected' : '') + '>' + value + '</option>';
-    }
-    return options;
-  }
   function timePointEditor(dayIndex, itemIndex, endpoint, values, label) {
     const base = 'days.' + dayIndex + '.items.' + itemIndex + '.' + endpoint;
-    const heading = label === "行程" ? "" : '<strong>' + label + '時間</strong>';
-    return '<div class="time-point">' + heading + '<div class="time-units">' +
-      '<label>時<select class="edit-input time-wheel" aria-label="' + label + '時間小時" name="' + base + 'Hour">' + timeUnitOptions(23, values[0]) + '</select></label>' +
-      '<label>分<select class="edit-input time-wheel" aria-label="' + label + '時間分鐘" name="' + base + 'Minute">' + timeUnitOptions(59, values[1]) + '</select></label>' +
-      '</div></div>';
+    const value = Array.isArray(values) ? values.join(":") : readSingleTime(values).join(":");
+    return '<div class="time-point itinerary-time-point"><input class="edit-input time-wheel" type="time" lang="en-GB" step="60" aria-label="' + esc(label) + '時間" name="' + base + '" value="' + esc(value) + '" /></div>';
   }
   function flightTimeEditor(label, name, value) {
-    const [hour, minute] = readSingleTime(value);
-    return '<label class="edit-label flight-time-editor">' + esc(label) + '（24 小時制）<div class="time-units">' +
-      '<label>時<select class="edit-input time-wheel" name="' + name + 'Hour" aria-label="' + esc(label) + '小時">' + timeUnitOptions(23, hour) + '</select></label>' +
-      '<label>分<select class="edit-input time-wheel" name="' + name + 'Minute" aria-label="' + esc(label) + '分鐘">' + timeUnitOptions(59, minute) + '</select></label>' +
-      '</div></label>';
+    const time = readSingleTime(value).join(":");
+    return '<label class="edit-label flight-time-editor">' + esc(label) + '（24 小時制）<input class="edit-input time-wheel" type="time" lang="en-GB" step="60" name="' + name + '" aria-label="' + esc(label) + '" value="' + esc(time) + '" /></label>';
   }
   function tabContents() {
     if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}${input("天氣地區", "weatherLocation", state.weatherLocation || "", "text", "例如 Hanoi, Vietnam")}</div>`;
@@ -838,24 +824,12 @@
     const form = document.getElementById("trip-form"); if (!form) return;
     const data = new FormData(form);
     for (const [path, value] of data) {
-      if (!path || path.endsWith(".calendarDate") || /\.time(Hour|Minute)$/.test(path) || /^flights\.\d+\.(departure|arrival)Time(Hour|Minute)$/.test(path)) continue;
+      if (!path || path.endsWith(".calendarDate")) continue;
       setPath(state, path, value);
     }
     for (let i = 0; i < state.days.length; i++) {
       const date = data.get("days." + i + ".calendarDate");
       if (date) state.days[i].date = calendarDateText(String(date));
-      for (let j = 0; j < state.days[i].items.length; j++) {
-        const path = "days." + i + ".items." + j;
-        const time = ["Hour", "Minute"].map(unit => data.get(path + ".time" + unit));
-        if (time.every(value => value !== null)) state.days[i].items[j].time = time.join(":");
-      }
-    }
-    for (let i = 0; i < (state.flights || []).length; i++) {
-      for (const endpoint of ["departureTime", "arrivalTime"]) {
-        const hour = data.get("flights." + i + "." + endpoint + "Hour");
-        const minute = data.get("flights." + i + "." + endpoint + "Minute");
-        if (hour !== null && minute !== null) state.flights[i][endpoint] = String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
-      }
     }
   }
 
@@ -1071,6 +1045,8 @@
       @media(max-width:640px){.editor-place-toolbar{top:124px;gap:6px;align-items:center;flex-direction:row}.editor-place-filter-row{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto;padding:8px 12px;font-size:13px}.editor-place-actions{gap:5px}.editor-place-actions>[data-add-tag]{min-height:42px;padding:8px 10px}.editor-place-add{flex:0 0 42px;width:42px;height:42px}.editor-itinerary-row>[data-delete-item]{grid-column:2/-1}}
       .editor-day-picker{display:flex;align-items:center;gap:8px;overflow:hidden}.editor-day-list{display:flex;align-items:center;flex:1 1 auto;min-width:0;gap:8px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;scroll-snap-type:x proximity}.editor-day-list::-webkit-scrollbar{display:none}.editor-day-choice{scroll-snap-align:start}.editor-day-picker>.editor-day-add{flex:0 0 46px;margin-left:auto}
       @media(max-width:640px){.editor-day-picker{gap:6px}.editor-day-list{gap:6px}.editor-day-picker>.editor-day-add{flex-basis:42px}}
+      .itinerary-time-point{min-width:0}.itinerary-time-point .time-wheel{display:block;width:100%;min-width:0;font-variant-numeric:tabular-nums}.flight-time-editor .time-wheel{margin-top:5px}
+      @media(max-width:640px){.editor-panel,.editor-panel.wide{width:100vw;max-width:100vw;min-width:0;box-sizing:border-box;overflow-x:hidden}.editor-form,.editor-day-card,.editor-day-card>.edit-grid,.editor-day-card>.mt-3,.editor-itinerary-row,.editor-itinerary-row>.edit-label,.editor-itinerary-row>.time-wheel-group,.time-point,.flight-fields,.flight-time-editor{min-width:0;max-width:100%;box-sizing:border-box}.editor-heading{flex-wrap:nowrap;align-items:center}.editor-heading>div:first-child{flex:1 1 auto;min-width:0}.editor-heading p{display:none}.editor-heading-actions{flex:0 1 auto;max-width:58%;width:auto;flex-wrap:wrap;gap:4px}.editor-heading-actions .edit-button{padding:7px 8px;font-size:11px}.editor-heading-actions .editor-save-message{flex-basis:100%;max-width:100%;font-size:10px}.edit-input{min-width:0;max-width:100%;box-sizing:border-box}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);width:100%;gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:2/-1;width:100%;max-width:none}.editor-itinerary-row>.edit-label,.editor-itinerary-row>[data-delete-item]{grid-column:2/-1}.editor-itinerary-row .itinerary-time-point{padding:0;border:0;background:transparent}.editor-itinerary-row .time-wheel{min-height:44px;font-size:16px}.editor-itinerary-row>[data-delete-item]{width:auto;justify-self:start}}
     `; document.head.append(style);
   }
 
