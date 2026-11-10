@@ -14,6 +14,7 @@
   let activeDayIndex = 0;
   let activeDayFilter = "全部行程";
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
+  let weatherCache = { location: "", promise: null, data: null, loadedAt: 0 };
 
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const safeUrl = value => { try { const u = new URL(value); return ["https:", "http:"].includes(u.protocol) ? u.href : ""; } catch { return ""; } };
@@ -60,6 +61,7 @@
       title: h1?.textContent.trim() || "旅行行程",
       dateRange: document.querySelector("header p")?.textContent.trim() || "",
       duration: document.querySelector("header span.bg-red-800")?.textContent.trim() || "",
+      weatherLocation: "",
       days,
       places: { attractions: attractionItems, entertainment: entertainmentItems, food: foodItems },
       flights: []
@@ -124,6 +126,83 @@
     return "其他";
   }
 
+  function weatherIcon(code, isDay) {
+    if (code === 0) return isDay ? "☀️" : "🌙";
+    if ([1, 2].includes(code)) return isDay ? "🌤️" : "☁️";
+    if (code === 3) return "☁️";
+    if ([45, 48].includes(code)) return "🌫️";
+    if ([51, 53, 55, 56, 57].includes(code)) return "🌦️";
+    if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "🌧️";
+    if ([71, 73, 75, 77, 85, 86].includes(code)) return "❄️";
+    if ([95, 96, 99].includes(code)) return "⛈️";
+    return "🌡️";
+  }
+  function weatherDescription(code) {
+    if (code === 0) return "晴朗";
+    if ([1, 2].includes(code)) return "晴時多雲";
+    if (code === 3) return "多雲";
+    if ([45, 48].includes(code)) return "有霧";
+    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "有雨";
+    if ([71, 73, 75, 77, 85, 86].includes(code)) return "降雪";
+    if ([95, 96, 99].includes(code)) return "雷雨";
+    return "目前天氣";
+  }
+  async function fetchTripWeather(location) {
+    const geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(location) + "&count=1&language=zh&format=json";
+    const geoResponse = await fetch(geoUrl);
+    if (!geoResponse.ok) throw new Error("地區搜尋失敗");
+    const geo = await geoResponse.json();
+    const place = geo.results?.[0];
+    if (!place) throw new Error("找不到這個地區");
+    const query = new URLSearchParams({
+      latitude: String(place.latitude), longitude: String(place.longitude),
+      current: "temperature_2m,weather_code,is_day", timezone: "auto", forecast_days: "1"
+    });
+    const weatherResponse = await fetch("https://api.open-meteo.com/v1/forecast?" + query);
+    if (!weatherResponse.ok) throw new Error("天氣資料暫時無法讀取");
+    const weather = await weatherResponse.json();
+    return { place: place.name, country: place.country, current: weather.current };
+  }
+  function refreshWeatherBadge() {
+    const badge = document.querySelector("header span.bg-red-800");
+    const location = String(state?.weatherLocation || "").trim();
+    if (!badge || !state || document.body.dataset.activeTab !== "sec-itinerary") return;
+    if (!location) {
+      badge.textContent = "☀️　旅程準備就緒";
+      badge.title = "登入編輯並設定天氣地區，即可顯示當地天氣";
+      return;
+    }
+    const show = data => {
+      if (String(state?.weatherLocation || "").trim() !== location) return;
+      const current = data.current || {};
+      const temp = Number.isFinite(Number(current.temperature_2m)) ? Math.round(Number(current.temperature_2m)) + "°C" : "--°";
+      const code = Number(current.weather_code);
+      badge.textContent = weatherIcon(code, Number(current.is_day)) + "　" + temp + " · " + weatherDescription(code);
+      badge.title = location + " · " + [data.place, data.country].filter(Boolean).join(", ") + " · Open-Meteo";
+    };
+    if (weatherCache.location === location && weatherCache.data && Date.now() - weatherCache.loadedAt < 30 * 60 * 1000) {
+      show(weatherCache.data); return;
+    }
+    if (weatherCache.location === location && weatherCache.promise) {
+      badge.textContent = "🌤️　正在讀取天氣…";
+      weatherCache.promise.then(show).catch(() => { badge.textContent = "🌦️　天氣暫不可用"; });
+      return;
+    }
+    badge.textContent = "🌤️　正在讀取天氣…";
+    const promise = fetchTripWeather(location);
+    weatherCache = { location, promise, data: null, loadedAt: 0 };
+    promise.then(data => {
+      if (weatherCache.location === location) weatherCache = { location, promise: null, data, loadedAt: Date.now() };
+      show(data);
+    }).catch(() => {
+      if (weatherCache.location === location) weatherCache = { location, promise: null, data: null, loadedAt: Date.now() };
+      if (String(state?.weatherLocation || "").trim() === location) {
+        badge.textContent = "🌦️　天氣暫不可用";
+        badge.title = "請確認地區名稱，或稍後重試";
+      }
+    });
+  }
+
   function renderFlightSummary() {
     if (!state) return;
     const header = document.querySelector("header");
@@ -174,6 +253,7 @@
         : state.dateRange;
     }
     const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = "☀️　旅程準備就緒";
+    refreshWeatherBadge();
     renderFlightSummary();
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
@@ -216,6 +296,11 @@
       overview.replaceChildren();
       const overviewCopy = el("div");
       overviewCopy.append(el("span", "trip-day-full-date", (selectedDay?.date || "日期待填") + "　·　DAY " + (activeDayIndex + 1)), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
+      if (state.weatherLocation) {
+        const credit = el("a", "weather-credit", state.weatherLocation + " · Weather by Open-Meteo");
+        credit.href = "https://open-meteo.com/"; credit.target = "_blank"; credit.rel = "noopener noreferrer";
+        overviewCopy.append(credit);
+      }
       overview.append(overviewCopy, el("span", "trip-day-count", items.length + " 個行程"));
 
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
@@ -459,7 +544,7 @@
       '</div></div>';
   }
   function tabContents() {
-    if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
+    if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}${input("天氣地區", "weatherLocation", state.weatherLocation || "", "text", "例如 Hanoi, Vietnam")}</div>`;
     if (activeTab === "flights") {
       state.flights ||= [];
       const cards = state.flights.map((flight, i) => '<section class="edit-card editor-flight-card"><div class="editor-card-heading"><strong>' + esc(flight.direction || "航班") + ' · ' + esc(flight.flightNumber || "新航班") + '</strong><button type="button" class="edit-button tiny danger" data-delete-flight="' + i + '">移除此航班</button></div><div class="edit-grid flight-fields">' +
@@ -736,6 +821,9 @@
       body:not([data-active-tab="sec-itinerary"]) #sec-map #map-category-filter{gap:6px}
       .map-pin{touch-action:none;user-select:none;-webkit-user-select:none}
       @media(max-width:640px){body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{top:0;padding:10px 2px}.trip-header-actions .trip-editor-login{padding:7px 10px!important;font-size:11px}}
+      .weather-credit{display:inline-flex;margin-top:4px;color:#819198;font-size:9px;line-height:1.3;text-decoration:none}
+      .weather-credit:hover{text-decoration:underline;color:#198e8b}
+      header span.bg-red-800{max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     `; document.head.append(style);
   }
 
@@ -774,11 +862,11 @@
           if (heading) heading.append(actions);
         }
       };
-      window.addEventListener("trip:tab-change", event => placeActions(event.detail?.tabId || document.body.dataset.activeTab));
+      window.addEventListener("trip:tab-change", event => { const tabId = event.detail?.tabId || document.body.dataset.activeTab; placeActions(tabId); if (tabId === "sec-itinerary") refreshWeatherBadge(); });
       placeActions(document.body.dataset.activeTab || "sec-itinerary");
     }
     state = captureInitial();
-    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; state.flights ||= []; renderPage(); } }
+    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; state.flights ||= []; state.weatherLocation ||= ""; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
     if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
     await syncSharedFavorites(true);
