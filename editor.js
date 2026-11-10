@@ -314,20 +314,20 @@
 
   function input(label, name, value, type = "text", placeholder = "") { return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`; }
   function calendarDateValue(value) {
-    const m = String(value || '').match(/(20\\d{2})[/-](\\d{1,2})[/-](\\d{1,2})/);
-    const md = String(value || '').match(/(\\d{1,2})\\s*\\/\\s*(\\d{1,2})/);
-    const year = (m && m[1]) || String(state?.dateRange || '').match(/20\\d{2}/)?.[0] || new Date().getFullYear();
+    const m = String(value || '').match(/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})/);
+    const md = String(value || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    const year = (m && m[1]) || String(state?.dateRange || '').match(/20\d{2}/)?.[0] || new Date().getFullYear();
     const month = m ? m[2] : md && md[1], day = m ? m[3] : md && md[2];
     return month && day ? String(year) + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0') : '';
   }
   function calendarDateText(value) {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
     const d = new Date(value + 'T12:00:00');
     return (d.getMonth()+1) + '/' + d.getDate() + ' (週' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
   }
   function readTimePair(value) {
     const p = String(value || '').split(/[-–~～至]/).map(x => x.trim());
-    return p.length === 2 && p.every(x => /^\\d{1,2}:\\d{2}$/.test(x)) ? p.map(x => x.padStart(5,'0')) : null;
+    return p.length === 2 && p.every(x => /^\d{1,2}:\d{2}$/.test(x)) ? p.map(x => x.padStart(5,'0')) : null;
   }
   function tabContents() {
     if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
