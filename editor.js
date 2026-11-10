@@ -521,7 +521,7 @@
     overlay.append(panel); overlay.addEventListener("click", event => {
       if (!event.target.closest("[data-close]")) return;
       if (panel.querySelector("#trip-form") && editorHasUnsavedChanges && !window.confirm("有尚未儲存的修改，確定離開編輯畫面嗎？")) return;
-      const returnToEditor = Boolean(panel.querySelector("#new-tag-form"));
+      const returnToEditor = Boolean(panel.querySelector("#new-tag-form, #edit-tag-form"));
       if (panel.querySelector("#trip-form")) editorHasUnsavedChanges = false;
       closeDialog();
       if (returnToEditor) editDialog();
@@ -644,7 +644,8 @@
   }
   function timePointEditor(dayIndex, itemIndex, endpoint, values, label) {
     const base = 'days.' + dayIndex + '.items.' + itemIndex + '.' + endpoint;
-    return '<div class="time-point"><strong>' + label + '時間</strong><div class="time-units">' +
+    const heading = label === "行程" ? "" : '<strong>' + label + '時間</strong>';
+    return '<div class="time-point">' + heading + '<div class="time-units">' +
       '<label>時<select class="edit-input time-wheel" aria-label="' + label + '時間小時" name="' + base + 'Hour">' + timeUnitOptions(23, values[0]) + '</select></label>' +
       '<label>分<select class="edit-input time-wheel" aria-label="' + label + '時間分鐘" name="' + base + 'Minute">' + timeUnitOptions(59, values[1]) + '</select></label>' +
       '</div></div>';
@@ -698,6 +699,35 @@
       }
       state.tagOptions[key].push(value);
       editorHasUnsavedChanges = true;
+      closeDialog();
+      editDialog();
+    });
+  }
+
+  function editTagDialog(key, index) {
+    const oldTag = state.tagOptions?.[key]?.[index];
+    if (oldTag === undefined) return;
+    showDialog(`<h2 class="text-xl font-bold mb-2">編輯標籤</h2><p class="text-sm text-slate-500 mb-4">改名後，所有使用此標籤的項目與篩選會一起更新。</p><form id="edit-tag-form"><label class="edit-label">標籤名稱<input name="tag" class="edit-input" maxlength="100" required value="${esc(oldTag)}" /></label><p id="tag-error" class="text-sm text-red-600 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>取消</button><button class="edit-button">儲存名稱</button></div></form>`);
+    document.getElementById("edit-tag-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const updated = String(new FormData(event.currentTarget).get("tag") || "").trim();
+      const error = document.getElementById("tag-error");
+      if (!updated) { error.textContent = "請輸入標籤名稱。"; return; }
+      if (state.tagOptions[key].some((tag, i) => i !== index && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) { error.textContent = "這個標籤已存在。"; return; }
+      if (updated !== oldTag) {
+        state.tagOptions ||= {};
+        for (const placeKey of Object.keys(state.places || {})) {
+          state.places[placeKey].forEach(item => { if (item.category === oldTag) item.category = updated; });
+          const options = state.tagOptions[placeKey] || [];
+          const matching = options.indexOf(oldTag);
+          if (matching >= 0) {
+            if (options.some((tag, i) => i !== matching && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) options.splice(matching, 1);
+            else options[matching] = updated;
+          }
+          if (placeEditFilters[placeKey] === oldTag) placeEditFilters[placeKey] = updated;
+        }
+        editorHasUnsavedChanges = true;
+      }
       closeDialog();
       editDialog();
     });
@@ -783,15 +813,7 @@
     document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
     document.querySelectorAll("[data-edit-tag]").forEach(button => button.addEventListener("click", () => {
       readForm();
-      const key = activeTab, index = Number(button.dataset.editTag), oldTag = state.tagOptions[key]?.[index];
-      if (oldTag === undefined) return;
-      const updated = window.prompt("編輯標籤名稱", oldTag)?.trim();
-      if (!updated || updated === oldTag) return;
-      if (state.tagOptions[key].some((tag, i) => i !== index && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) return window.alert("這個標籤已存在。");
-      state.tagOptions[key][index] = updated;
-      state.places[key].forEach(item => { if (item.category === oldTag) item.category = updated; });
-      if (placeEditFilters[key] === oldTag) placeEditFilters[key] = updated;
-      editorHasUnsavedChanges = true; editDialog();
+      editTagDialog(activeTab, Number(button.dataset.editTag));
     }));
     document.querySelectorAll("[data-delete-tag]").forEach(button => button.addEventListener("click", () => {
       readForm();
@@ -1040,12 +1062,12 @@
       .editor-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;max-width:55%}.editor-heading-actions .edit-button{white-space:nowrap;padding:8px 11px}.editor-heading-actions .editor-save-message{flex-basis:100%;text-align:right;min-height:16px;font-size:11px}
       .edit-tabs{top:78px;z-index:14}.editor-day-picker{position:sticky;top:132px;z-index:13;display:flex;gap:8px;overflow-x:auto;margin:-6px -2px 12px;padding:9px 2px 12px;background:#f4f8f7;scrollbar-width:none}.editor-day-picker::-webkit-scrollbar{display:none}.editor-day-choice{flex:0 0 auto;min-width:76px;min-height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 11px;border:1px solid #dceceb;border-radius:15px;background:#fff;color:#61767b}.editor-day-choice-label{font-size:9px;font-weight:800;letter-spacing:.08em;color:#819198}.editor-day-choice strong{font-size:12px;color:#29484a}.editor-day-choice.active{border-color:#198e8b;background:#198e8b;color:#fff;box-shadow:0 5px 12px rgba(25,142,139,.18)}.editor-day-choice.active .editor-day-choice-label,.editor-day-choice.active strong{color:#fff}
       @media(max-width:640px){.editor-heading{align-items:flex-start}.editor-heading-actions{gap:5px;max-width:58%}.editor-heading-actions .edit-button{padding:7px 9px;font-size:11px}.editor-heading-actions .editor-save-message{font-size:10px}.edit-tabs{top:72px;z-index:14}.editor-day-picker{top:124px;gap:6px;margin-top:-7px;padding-top:8px}.editor-day-choice{min-width:68px;min-height:56px;padding:7px 9px}}
-      .editor-day-add{flex:0 0 46px;width:46px;height:46px;align-self:center;border:1px dashed #198e8b;border-radius:50%;background:#e9f6f5;color:#198e8b;font-size:27px;line-height:1;font-weight:500}.editor-place-toolbar{display:flex;align-items:center;gap:10px;margin:4px 2px 5px}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-filter{padding:7px 12px;border:1px solid #d3e5e3;border-radius:999px;background:#fff;color:#61767b;font-size:12px;font-weight:700;white-space:nowrap}.editor-place-filter.active{background:#198e8b;color:#fff;border-color:#198e8b;box-shadow:0 3px 9px rgba(25,142,139,.15)}.editor-place-help{margin:0 2px 12px;color:#7b9092;font-size:11px}.editor-place-toolbar>.edit-button{flex:0 0 auto}.flight-add-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.flight-add-actions .edit-button{margin-top:0!important}.flight-time-editor>.time-units{margin-top:6px}.flight-time-editor .time-wheel{font-size:14px}
+      .editor-day-add{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 46px;width:46px;height:46px;align-self:center;padding:0;border:1px dashed #198e8b;border-radius:50%;background:#e9f6f5;color:#198e8b;font-size:27px;line-height:1;text-align:center;font-weight:500}.editor-place-toolbar{display:flex;align-items:center;gap:10px;margin:4px 2px 5px}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-filter{padding:7px 12px;border:1px solid #d3e5e3;border-radius:999px;background:#fff;color:#61767b;font-size:12px;font-weight:700;white-space:nowrap}.editor-place-filter.active{background:#198e8b;color:#fff;border-color:#198e8b;box-shadow:0 3px 9px rgba(25,142,139,.15)}.editor-place-help{margin:0 2px 12px;color:#7b9092;font-size:11px}.editor-place-toolbar>.edit-button{flex:0 0 auto}.flight-add-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.flight-add-actions .edit-button{margin-top:0!important}.flight-time-editor>.time-units{margin-top:6px}.flight-time-editor .time-wheel{font-size:14px}
       @media(max-width:640px){.editor-day-add{width:42px;height:42px;flex-basis:42px}.editor-place-toolbar{align-items:flex-start;flex-direction:column}.editor-place-toolbar>.edit-button{align-self:flex-end}.editor-place-filter-row{width:100%;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto}}
       .editor-day-sticky{position:sticky;top:132px;z-index:13;background:#f4f8f7;padding-bottom:9px}.editor-day-picker{position:static;top:auto;margin:-6px -2px 8px;padding:9px 2px;background:#f4f8f7}.editor-day-fixed-actions{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px 12px;background:#fff;border:1px solid #dceceb;border-radius:15px;box-shadow:0 4px 12px rgba(28,71,73,.04)}.editor-day-fixed-actions>strong{font-size:14px;color:#173b40}.editor-day-fixed-buttons{display:flex;gap:7px;flex:0 0 auto}.editor-day-fixed-buttons .edit-button{min-height:42px;padding:8px 11px}.editor-day-choice[draggable="true"],.editor-itinerary-row[draggable="true"]{cursor:grab}.itinerary-drag-handle,.editor-day-drag-grip{color:#819198;cursor:grab;user-select:none;touch-action:none}.itinerary-drag-handle{display:flex;align-items:center;justify-content:center;font-size:19px}.editor-day-drag-grip{font-style:normal;font-size:15px}.itinerary-sort-hint{color:#819198;font-size:11px;font-weight:500}.editor-day-choice.is-dragging,.editor-itinerary-row.is-dragging{opacity:.4}.editor-itinerary-row{grid-template-columns:24px minmax(160px,.8fr) minmax(170px,1.1fr) minmax(180px,1.3fr) auto}
       @media(max-width:640px){.editor-day-sticky{top:124px}.editor-day-fixed-actions{padding:9px;gap:6px}.editor-day-fixed-actions>strong{font-size:12px}.editor-day-fixed-buttons{gap:5px}.editor-day-fixed-buttons .edit-button{min-height:40px;padding:7px 8px;font-size:12px}.editor-day-choice{min-width:74px}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel,.editor-itinerary-row>.edit-label,.editor-itinerary-row>button{grid-column:2/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:2/-1}.editor-itinerary-row>button{justify-self:start}}
-      .editor-place-toolbar{position:sticky;top:132px;z-index:13;display:flex;align-items:center;gap:8px;margin:0 -2px 9px;padding:8px 2px;background:#f4f8f7}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}.editor-place-actions>.edit-button{margin:0}.editor-place-add{width:44px;height:44px;padding:0!important;border-radius:50%!important;font-size:25px!important;line-height:1}.editor-place-help{margin:0 2px 10px;color:#7b9092;font-size:12px}.editor-tag-manager{margin:0 0 12px;padding:0 12px;background:#fff;border:1px solid #dceceb;border-radius:14px;color:#526c6e}.editor-tag-manager>summary{padding:12px 0;font-size:13px;font-weight:750;cursor:pointer}.editor-tag-list{display:grid;gap:7px;padding:0 0 12px}.editor-tag-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e6efee;border-radius:10px;background:#f8fbfa;font-size:13px;font-weight:650}.editor-tag-entry>div{display:flex;gap:6px}.editor-tag-entry .edit-button{min-height:36px}
-      @media(max-width:640px){.editor-place-toolbar{top:124px;gap:6px;align-items:center;flex-direction:row}.editor-place-filter-row{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto;padding:8px 12px;font-size:13px}.editor-place-actions{gap:5px}.editor-place-actions>[data-add-tag]{min-height:42px;padding:8px 10px}.editor-place-add{width:42px;height:42px;flex-basis:42px}}
+      .editor-place-toolbar{position:sticky;top:132px;z-index:13;display:flex;align-items:center;gap:8px;margin:0 -2px 9px;padding:8px 2px;background:#f4f8f7}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}.editor-place-actions>.edit-button{margin:0}.editor-place-add{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 44px;width:44px;height:44px;padding:0!important;border-radius:50%!important;font-size:25px!important;line-height:1;text-align:center}.editor-place-help{margin:0 2px 10px;color:#7b9092;font-size:12px}.editor-tag-manager{margin:0 0 12px;padding:0 12px;background:#fff;border:1px solid #dceceb;border-radius:14px;color:#526c6e}.editor-tag-manager>summary{padding:12px 0;font-size:13px;font-weight:750;cursor:pointer}.editor-tag-list{display:grid;gap:7px;padding:0 0 12px}.editor-tag-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e6efee;border-radius:10px;background:#f8fbfa;font-size:13px;font-weight:650}.editor-tag-entry>div{display:flex;gap:6px}.editor-tag-entry .edit-button{min-height:36px}.editor-itinerary-row{grid-template-columns:24px minmax(160px,.8fr) minmax(170px,1.1fr) auto}.editor-itinerary-row .time-point{padding:6px 8px}.editor-itinerary-row>[data-delete-item]{justify-self:start;width:auto;min-width:54px;max-width:78px;min-height:36px;padding:5px 9px;font-size:12px}
+      @media(max-width:640px){.editor-place-toolbar{top:124px;gap:6px;align-items:center;flex-direction:row}.editor-place-filter-row{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto;padding:8px 12px;font-size:13px}.editor-place-actions{gap:5px}.editor-place-actions>[data-add-tag]{min-height:42px;padding:8px 10px}.editor-place-add{flex:0 0 42px;width:42px;height:42px}.editor-itinerary-row>[data-delete-item]{grid-column:2/-1}}
     `; document.head.append(style);
   }
 
