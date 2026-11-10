@@ -203,7 +203,7 @@
       } else {
         const foodTags = {
           "米其林一星": ["⭐ 一星", "bg-amber-100", "text-amber-800"],
-          "必比登": ["🍲 必比登", "bg-rose-100", "text-rose-700"],
+          "必比登": ["🍲 必比登", "bg-red-100", "text-red-700"],
           "米其林入選": ["米其林入選", "bg-slate-100", "text-slate-700"]
         };
         const [displayCategory, background, foreground] = foodTags[category] || [category || badge, "bg-slate-100", "text-slate-700"];
@@ -224,6 +224,10 @@
   function renderFilters(section, items, datasetKey, className) {
     const holder = section.querySelector(".place-filters"); if (!holder) return;
     holder.replaceChildren();
+    holder.style.display = "flex";
+    holder.style.flexWrap = "wrap";
+    holder.style.overflowX = "visible";
+    holder.style.gap = "8px";
     const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
     const activeFilter = filters.get(section.id) || "all";
     const makeButton = (name, category) => {
