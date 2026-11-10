@@ -181,8 +181,8 @@
       const high = daily.temperature_2m_max?.[index], low = daily.temperature_2m_min?.[index];
       const code = Number(daily.weather_code?.[index]);
       credit.textContent = index >= 0 && high != null && low != null
-        ? region + " · " + weatherIcon(code, 1) + " " + weatherDescription(code) + " · 最高 " + Math.round(Number(high)) + "° / 最低 " + Math.round(Number(low)) + "° · Weather by Open-Meteo"
-        : region + " · 當日天氣預報尚未提供 · Weather by Open-Meteo";
+        ? region + " · " + weatherIcon(code, 1) + " " + weatherDescription(code) + " · 最高 " + Math.round(Number(high)) + "° / 最低 " + Math.round(Number(low)) + "° · By Open-Meteo"
+        : region + " · 當日天氣預報尚未提供 · By Open-Meteo";
       credit.title = "行程日期：" + (state.days[activeDayIndex]?.date || "未設定日期");
     }
   }
@@ -268,14 +268,14 @@
     const title = document.querySelector("header h1"); if (title) title.textContent = state.title;
     const date = document.querySelector("header p");
     if (date) {
-      const matches = [...String(state.dateRange || "").matchAll(/(\d{1,2})\/(\d{1,2})/g)];
+      const matches = [...String(tripHeaderDateRange()).matchAll(/(\d{1,2})\/(\d{1,2})/g)];
       const monthNames = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-      const daysCount = String(state.duration || "").match(/(\d+)\s*天/);
+      const daysCount = state.days.length;
       date.textContent = matches.length >= 2
-        ? monthNames[Number(matches[0][1]) - 1] + " " + matches[0][2] + " — " + monthNames[Number(matches[1][1]) - 1] + " " + matches[1][2] + (daysCount ? "　·　" + daysCount[1] + " DAYS" : "")
-        : state.dateRange;
+        ? monthNames[Number(matches[0][1]) - 1] + " " + matches[0][2] + " — " + monthNames[Number(matches[1][1]) - 1] + " " + matches[1][2] + (daysCount ? "　·　" + daysCount + " DAYS" : "")
+        : (tripHeaderDateRange() + (daysCount ? "　·　" + daysCount + " DAYS" : ""));
     }
-    const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration || "";
+    document.querySelector("header span.bg-red-800")?.remove();
     refreshTripWeather();
     renderFlightSummary();
     const itinerary = document.getElementById("sec-itinerary");
@@ -322,7 +322,7 @@
       const overviewCopy = el("div");
       overviewCopy.append(el("span", "trip-day-full-date", (selectedDay?.date || "日期待填") + "　·　DAY " + (activeDayIndex + 1)), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
       if (state.weatherLocation) {
-        const credit = el("a", "weather-credit", state.weatherLocation + " · 正在讀取當日天氣 · Weather by Open-Meteo");
+        const credit = el("a", "weather-credit", state.weatherLocation + " · 正在讀取當日天氣 · By Open-Meteo");
         credit.id = "trip-weather-credit";
         credit.href = "https://open-meteo.com/"; credit.target = "_blank"; credit.rel = "noopener noreferrer";
         overviewCopy.append(credit);
@@ -550,11 +550,17 @@
     if (!toolbar) return;
     activeEditDayIndex = state.days.length ? Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)) : 0;
     const picker = el("div", "editor-day-picker");
+    picker.id = "editor-day-picker";
     state.days.forEach((day, index) => {
       const button = el("button", `editor-day-choice${index === activeEditDayIndex ? " active" : ""}`);
       button.type = "button";
+      button.draggable = true;
+      button.dataset.dayIndex = String(index);
+      button.title = "拖曳或按住 ⠿ 調整日期順序";
       button.setAttribute("aria-pressed", String(index === activeEditDayIndex));
-      button.append(el("span", "editor-day-choice-label", `DAY ${index + 1}`), el("strong", "", day.date || "日期待填"));
+      const label = el("span", "editor-day-choice-label");
+      label.append(document.createTextNode(`DAY ${index + 1} `), el("i", "editor-day-drag-grip", "⠿"));
+      button.append(label, el("strong", "", day.date || "日期待填"));
       button.addEventListener("click", () => { readForm(); activeEditDayIndex = index; editDialog(); });
       picker.append(button);
     });
@@ -564,8 +570,20 @@
     addDay.setAttribute("aria-label", "新增天數");
     addDay.title = "新增天數";
     picker.append(addDay);
-    toolbar.insertAdjacentElement("afterend", picker);
-    if (!state.days.length) picker.insertAdjacentElement("afterend", el("div", "editor-empty", "目前沒有行程日，請新增一天開始編輯。"));
+    const sticky = el("div", "editor-day-sticky");
+    sticky.append(picker);
+    if (state.days.length) {
+      const actions = el("div", "editor-day-fixed-actions");
+      actions.append(el("strong", "", `第 ${activeEditDayIndex + 1} 天 · ${state.days[activeEditDayIndex].date || "日期待填"}`));
+      const buttons = el("div", "editor-day-fixed-buttons");
+      const addItem = el("button", "edit-button secondary", "＋ 新增行程");
+      addItem.type = "button"; addItem.dataset.addItem = String(activeEditDayIndex);
+      const deleteDay = el("button", "edit-button danger", "刪除本日");
+      deleteDay.type = "button"; deleteDay.dataset.deleteDay = String(activeEditDayIndex);
+      buttons.append(addItem, deleteDay); actions.append(buttons); sticky.append(actions);
+    }
+    toolbar.insertAdjacentElement("afterend", sticky);
+    if (!state.days.length) sticky.insertAdjacentElement("afterend", el("div", "editor-empty", "目前沒有行程日，請新增一天開始編輯。"));
     panel.querySelectorAll(".editor-day-card").forEach((card, index) => {
       card.open = index === activeEditDayIndex;
       card.style.display = index === activeEditDayIndex ? "" : "none";
@@ -587,6 +605,29 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
     const d = new Date(value + 'T12:00:00');
     return (d.getMonth()+1) + '/' + d.getDate() + ' (' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
+  }
+  function shiftStoredDate(value, amount) {
+    const iso = calendarDateValue(value);
+    if (!iso) return '';
+    const date = new Date(iso + 'T12:00:00');
+    date.setDate(date.getDate() + amount);
+    return calendarDateText([date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'));
+  }
+  function resequenceDayDates(anchor) {
+    const iso = calendarDateValue(anchor);
+    if (!iso) return;
+    const start = new Date(iso + 'T12:00:00');
+    state.days.forEach((day, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      day.date = calendarDateText([date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'));
+    });
+  }
+  function tripHeaderDateRange() {
+    const dates = state.days.map(day => calendarDateValue(day.date)).filter(Boolean);
+    if (!dates.length) return state.dateRange || '';
+    const label = value => { const [, month, day] = value.split('-'); return Number(month) + '/' + Number(day); };
+    return dates.length === 1 ? label(dates[0]) : label(dates[0]) + ' — ' + label(dates[dates.length - 1]);
   }
   function readSingleTime(value) {
     const first = String(value || "").split(/[-–~～至]/)[0].trim();
@@ -631,7 +672,7 @@
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
       return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>使用 24 小時制設定航班時間，可選擇去程或回程。</p><div class="flight-add-actions"><button type="button" class="edit-button" data-add-flight="去程">＋ 新增去程</button><button type="button" class="edit-button secondary" data-add-flight="回程">＋ 新增回程</button></div></div>' + (cards || '<div class="editor-empty">尚未新增航班，請新增去程或回程航班。</div>');
     }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -670,6 +711,35 @@
     });
     document.querySelectorAll("[data-place-filter]").forEach(button => button.classList.toggle("active", button.dataset.placeFilter === selected));
   }
+  function bindSortable(root, itemSelector, handleSelector, onSorted) {
+    if (!root) return;
+    let dragged = null, changed = false;
+    const moveTo = (x, y) => {
+      const target = document.elementFromPoint(x, y)?.closest(itemSelector);
+      if (!dragged || !target || target === dragged || target.parentElement !== root) return;
+      const rect = target.getBoundingClientRect();
+      const before = root.id === "editor-day-picker" ? x < rect.left + rect.width / 2 : y < rect.top + rect.height / 2;
+      root.insertBefore(dragged, before ? target : target.nextSibling); changed = true;
+    };
+    const finish = () => {
+      if (dragged && changed) onSorted([...root.querySelectorAll(itemSelector)]);
+      dragged?.classList.remove("is-dragging"); dragged = null; changed = false;
+    };
+    root.querySelectorAll(itemSelector).forEach(item => {
+      item.addEventListener("dragstart", event => { dragged = item; changed = false; item.classList.add("is-dragging"); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "reorder"); });
+      item.addEventListener("dragend", () => { item.classList.remove("is-dragging"); dragged = null; });
+      item.addEventListener("pointerdown", event => {
+        if (event.pointerType !== "touch" || !event.target.closest(handleSelector)) return;
+        const pointer = event.pointerId, startX = event.clientX, startY = event.clientY;
+        let timer = setTimeout(() => { dragged = item; changed = false; item.classList.add("is-dragging"); }, 320);
+        const move = ev => { if (ev.pointerId !== pointer) return; if (!dragged) { if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) clearTimeout(timer); return; } ev.preventDefault(); moveTo(ev.clientX, ev.clientY); };
+        const end = ev => { if (ev.pointerId !== pointer) return; clearTimeout(timer); document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (dragged === item) finish(); };
+        document.addEventListener("pointermove", move, { passive: false }); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
+      });
+    });
+    root.addEventListener("dragover", event => { if (!dragged) return; event.preventDefault(); moveTo(event.clientX, event.clientY); });
+    root.addEventListener("drop", event => { if (!dragged) return; event.preventDefault(); finish(); });
+  }
   function bindEditor() {
     const form = document.getElementById("trip-form");
     form.addEventListener("input", () => { editorHasUnsavedChanges = true; });
@@ -678,13 +748,37 @@
       if (event.target.closest("[data-add-day],[data-add-item],[data-delete-item],[data-delete-day],[data-add-flight],[data-delete-flight],[data-add-place],[data-delete-place],[data-add-tag]")) editorHasUnsavedChanges = true;
     });
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
+    bindSortable(document.getElementById("editor-day-picker"), ".editor-day-choice", ".editor-day-drag-grip", ordered => {
+      readForm();
+      const selected = state.days[activeEditDayIndex];
+      const anchor = state.days.map(day => calendarDateValue(day.date)).filter(Boolean).sort()[0];
+      const reordered = ordered.map(node => state.days[Number(node.dataset.dayIndex)]);
+      state.days.splice(0, state.days.length, ...reordered);
+      activeEditDayIndex = state.days.indexOf(selected);
+      resequenceDayDates(anchor);
+      editorHasUnsavedChanges = true;
+      editDialog();
+    });
+    document.querySelectorAll(".editor-day-card").forEach((card, cardIndex) => {
+      const root = card.querySelector(".editor-itinerary-row")?.parentElement;
+      bindSortable(root, ".editor-itinerary-row", ".itinerary-drag-handle", ordered => {
+        readForm();
+        const dayIndex = cardIndex;
+        const items = state.days[dayIndex]?.items;
+        if (!items) return;
+        const reordered = ordered.map(node => items[Number(node.dataset.itemIndex)]);
+        items.splice(0, items.length, ...reordered);
+        editorHasUnsavedChanges = true;
+        editDialog();
+      });
+    });
     document.querySelectorAll("[data-place-filter]").forEach(button => button.addEventListener("click", () => { readForm(); placeEditFilters[activeTab] = button.dataset.placeFilter; applyEditorPlaceFilter(activeTab); }));
     document.querySelectorAll("[data-add-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: button.dataset.addFlight || "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
-    document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
+    document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); const previous = [...state.days].reverse().find(day => calendarDateValue(day.date)); state.days.push({ date: previous ? shiftStoredDate(previous.date, 1) : "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
     document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
-    document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); state.days.splice(Number(button.dataset.deleteDay),1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
+    document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); const removedIndex = Number(button.dataset.deleteDay); state.days.splice(removedIndex,1); for (let i = removedIndex; i < state.days.length; i++) if (calendarDateValue(state.days[i].date)) state.days[i].date = shiftStoredDate(state.days[i].date, -1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
     document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
     document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
     document.querySelectorAll("[data-delete-place]").forEach(button => button.addEventListener("click", () => { readForm(); const [key,i] = button.dataset.deletePlace.split("."); state.places[key].splice(Number(i),1); editDialog(); }));
@@ -802,15 +896,15 @@
       .trip-day{background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important;margin:0!important}
       .trip-day-heading{display:none}
       .trip-day-timeline{position:relative;padding:0 0 8px}
-      .trip-day-timeline:before{content:"";position:absolute;left:52px;top:12px;bottom:18px;width:2px;background:linear-gradient(#198e8b,#cde9e6 92%,transparent)}
-      .trip-entry{display:grid;grid-template-columns:45px minmax(0,1fr);gap:15px;position:relative;margin-bottom:16px}
-      .trip-entry-time{padding-top:18px;text-align:right;font-family:Georgia,serif;font-size:13px;font-weight:700;color:#198e8b;white-space:nowrap}
-      .trip-entry:before{content:"";position:absolute;left:47px;top:22px;width:12px;height:12px;border:3px solid #198e8b;border-radius:50%;background:#fff;box-shadow:0 0 0 4px #e5f5f3;z-index:1}
+      .trip-day-timeline:before{content:"";position:absolute;left:63px;top:12px;bottom:18px;width:2px;background:linear-gradient(#198e8b,#cde9e6 92%,transparent)}
+      .trip-entry{display:grid;grid-template-columns:55px minmax(0,1fr);gap:15px;position:relative;margin-bottom:16px}
+      .trip-entry-time{min-width:0;padding-top:18px;text-align:right;font-family:Georgia,serif;font-size:13px;font-weight:700;color:#198e8b;white-space:nowrap;font-variant-numeric:tabular-nums}
+      .trip-entry:before{content:"";position:absolute;left:57px;top:22px;width:12px;height:12px;border:3px solid #198e8b;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #e5f5f3;z-index:1}
       .trip-entry-card{position:relative;min-width:0;padding:16px;background:#fff;border:1px solid #dceceb;border-radius:21px;box-shadow:0 10px 30px rgba(37,83,84,.08)}
       .trip-entry-title{margin:0 0 6px;font-size:15px;font-weight:750;color:#22313a}
       .trip-entry-description{margin:0;color:#819198;font-size:12px;line-height:1.65}
       .trip-entry-range{display:inline-flex;margin-top:11px;padding:5px 8px;border-radius:9px;background:#edf8f7;color:#307a78;font-size:10px}
-      @media(max-width:640px){header.sticky>div:first-child{padding:20px 18px 10px!important}#trip-day-picker{padding-left:18px;padding-right:18px}.trip-entry{grid-template-columns:42px minmax(0,1fr);gap:14px}.trip-day-timeline:before{left:48px}.trip-entry:before{left:43px}.trip-entry-card{padding:14px}}
+      @media(max-width:640px){header.sticky>div:first-child{padding:20px 18px 10px!important}#trip-day-picker{padding-left:18px;padding-right:18px}.trip-entry{grid-template-columns:55px minmax(0,1fr);gap:14px}.trip-day-timeline:before{left:63px}.trip-entry:before{left:57px}.trip-entry-card{padding:14px}}
       /* Make the live page follow the preview's compact travel-app frame and filter row. */
       body{max-width:480px;margin:0 auto;background:#eaf0ef!important;box-shadow:0 0 45px rgba(36,60,59,.1)}
       header.sticky{max-width:480px!important}
@@ -917,7 +1011,7 @@
       @media(max-width:640px){body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{top:0;padding:10px 2px}.trip-header-actions .trip-editor-login{padding:7px 10px!important;font-size:11px}}
       .weather-credit{display:inline-flex;margin-top:4px;color:#819198;font-size:9px;line-height:1.3;text-decoration:none}
       .weather-credit:hover{text-decoration:underline;color:#198e8b}
-      header span.bg-red-800{max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      header span.bg-red-800{display:none!important;max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .trip-day-choice{min-height:104px}
       .trip-day-choice .trip-day-weather{font-size:9px;font-weight:800;color:#347b79;white-space:nowrap;line-height:1.15}
       .trip-day-choice.active .trip-day-weather{color:#fff}
@@ -927,6 +1021,8 @@
       @media(max-width:640px){.editor-heading{align-items:flex-start}.editor-heading-actions{gap:5px;max-width:58%}.editor-heading-actions .edit-button{padding:7px 9px;font-size:11px}.editor-heading-actions .editor-save-message{font-size:10px}.edit-tabs{top:72px;z-index:14}.editor-day-picker{top:124px;gap:6px;margin-top:-7px;padding-top:8px}.editor-day-choice{min-width:68px;min-height:56px;padding:7px 9px}}
       .editor-day-add{flex:0 0 46px;width:46px;height:46px;align-self:center;border:1px dashed #198e8b;border-radius:50%;background:#e9f6f5;color:#198e8b;font-size:27px;line-height:1;font-weight:500}.editor-place-toolbar{display:flex;align-items:center;gap:10px;margin:4px 2px 5px}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-filter{padding:7px 12px;border:1px solid #d3e5e3;border-radius:999px;background:#fff;color:#61767b;font-size:12px;font-weight:700;white-space:nowrap}.editor-place-filter.active{background:#198e8b;color:#fff;border-color:#198e8b;box-shadow:0 3px 9px rgba(25,142,139,.15)}.editor-place-help{margin:0 2px 12px;color:#7b9092;font-size:11px}.editor-place-toolbar>.edit-button{flex:0 0 auto}.flight-add-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.flight-add-actions .edit-button{margin-top:0!important}.flight-time-editor>.time-units{margin-top:6px}.flight-time-editor .time-wheel{font-size:14px}
       @media(max-width:640px){.editor-day-add{width:42px;height:42px;flex-basis:42px}.editor-place-toolbar{align-items:flex-start;flex-direction:column}.editor-place-toolbar>.edit-button{align-self:flex-end}.editor-place-filter-row{width:100%;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto}}
+      .editor-day-sticky{position:sticky;top:132px;z-index:13;background:#f4f8f7;padding-bottom:9px}.editor-day-picker{position:static;top:auto;margin:-6px -2px 8px;padding:9px 2px;background:#f4f8f7}.editor-day-fixed-actions{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px 12px;background:#fff;border:1px solid #dceceb;border-radius:15px;box-shadow:0 4px 12px rgba(28,71,73,.04)}.editor-day-fixed-actions>strong{font-size:14px;color:#173b40}.editor-day-fixed-buttons{display:flex;gap:7px;flex:0 0 auto}.editor-day-fixed-buttons .edit-button{min-height:42px;padding:8px 11px}.editor-day-choice[draggable="true"],.editor-itinerary-row[draggable="true"]{cursor:grab}.itinerary-drag-handle,.editor-day-drag-grip{color:#819198;cursor:grab;user-select:none;touch-action:none}.itinerary-drag-handle{display:flex;align-items:center;justify-content:center;font-size:19px}.editor-day-drag-grip{font-style:normal;font-size:15px}.itinerary-sort-hint{color:#819198;font-size:11px;font-weight:500}.editor-day-choice.is-dragging,.editor-itinerary-row.is-dragging{opacity:.4}.editor-itinerary-row{grid-template-columns:24px minmax(160px,.8fr) minmax(170px,1.1fr) minmax(180px,1.3fr) auto}
+      @media(max-width:640px){.editor-day-sticky{top:124px}.editor-day-fixed-actions{padding:9px;gap:6px}.editor-day-fixed-actions>strong{font-size:12px}.editor-day-fixed-buttons{gap:5px}.editor-day-fixed-buttons .edit-button{min-height:40px;padding:7px 8px;font-size:12px}.editor-day-choice{min-width:74px}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel,.editor-itinerary-row>.edit-label,.editor-itinerary-row>button{grid-column:2/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:2/-1}.editor-itinerary-row>button{justify-self:start}}
     `; document.head.append(style);
   }
 
