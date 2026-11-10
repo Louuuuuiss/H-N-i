@@ -77,7 +77,7 @@
     </style>
 </head>
 
-<body class="text-slate-800">
+<body class="text-slate-800" data-active-tab="sec-itinerary">
 
     <!-- Top Header -->
     <header class="sticky top-0 z-40 bg-red-700 text-white shadow-md">
@@ -923,13 +923,18 @@
                 });
             });
             map.addEventListener('pointerdown', event => {
-                if (event.target.closest('button, a')) return;
+                const control = event.target.closest('#map-controls, #map-popup, #map-warning, a, button:not(.map-pin)');
+                if (control) return;
                 pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-                map.setPointerCapture(event.pointerId);
                 dragMoved = false;
                 if (pointers.size === 2) {
                     const [a, b] = [...pointers.values()];
                     pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+                    for (const pointerId of pointers.keys()) {
+                        try { map.setPointerCapture(pointerId); } catch {}
+                    }
+                } else if (!event.target.closest('.map-pin')) {
+                    try { map.setPointerCapture(event.pointerId); } catch {}
                 }
                 map.classList.add('dragging');
             });
@@ -1073,6 +1078,8 @@
             });
 
             document.getElementById(tabId).classList.remove('hidden');
+            document.body.dataset.activeTab = tabId;
+            window.dispatchEvent(new CustomEvent('trip:tab-change', { detail: { tabId } }));
 
             if (tabId === 'sec-map') initializeTravelMap();
 
