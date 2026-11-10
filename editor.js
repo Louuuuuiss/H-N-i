@@ -12,6 +12,7 @@
   let state;
   let activeTab = "days";
   let activeDayIndex = 0;
+  let activeEditDayIndex = 0;
   let activeDayFilter = "全部行程";
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
   let weatherCache = { location: "", promise: null, data: null, loadedAt: 0 };
@@ -518,7 +519,7 @@
     closeDialog();
     const overlay = el("div", "editor-overlay"); overlay.id = "trip-editor-overlay";
     const panel = el("div", `editor-panel${wide ? " wide" : ""}`); panel.innerHTML = content;
-    overlay.append(panel); overlay.addEventListener("click", event => { if (event.target === overlay || event.target.closest("[data-close]")) closeDialog(); }); document.body.append(overlay);
+    overlay.append(panel); overlay.addEventListener("click", event => { if (event.target.closest("[data-close]")) closeDialog(); }); document.body.append(overlay);
   }
   function closeDialog() { document.getElementById("trip-editor-overlay")?.remove(); }
 
@@ -529,12 +530,34 @@
     showDialog(editorMarkup(), true);
     const panel = document.querySelector(".editor-panel");
     if (panel) panel.scrollTop = scrollTop;
+    if (activeTab === "days" && panel) prepareDayEditor(panel);
     bindEditor();
   }
 
   function editorMarkup() {
     const tabs = `<div class="edit-tabs">${[["trip", "基本資料"], ["flights", "航班"], ["days", "每日行程"], ["attractions", "景點"], ["entertainment", "娛樂"], ["food", "美食"]].map(([id, name]) => `<button type="button" class="edit-tab ${activeTab === id ? "active" : ""}" data-tab="${id}">${name}</button>`).join("")}</div>`;
-    return `<div class="editor-heading"><div><span class="editor-eyebrow">TRIP SETTINGS</span><h2>編輯旅程</h2><p>行程、航班與地點資料會同步儲存。</p></div><button type="button" class="edit-button secondary" data-close>完成</button></div>${tabs}<form id="trip-form" class="editor-form">${tabContents()}<div class="editor-savebar"><button type="button" id="logout-button" class="edit-button secondary">登出</button><span id="save-message" class="editor-save-message"></span><button type="submit" class="edit-button">儲存變更</button></div></form>`;
+    return `<form id="trip-form" class="editor-form"><div class="editor-heading"><div><span class="editor-eyebrow">TRIP SETTINGS</span><h2>編輯旅程</h2><p>行程、航班與地點資料會同步儲存。</p></div><div class="editor-heading-actions"><button type="button" id="logout-button" class="edit-button secondary">登出</button><button type="submit" class="edit-button">儲存</button><button type="button" class="edit-button secondary" data-close>完成</button><span id="save-message" class="editor-save-message"></span></div></div>${tabs}${tabContents()}</form>`;
+  }
+
+  function prepareDayEditor(panel) {
+    const toolbar = panel.querySelector(".days-toolbar");
+    if (!toolbar) return;
+    activeEditDayIndex = state.days.length ? Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)) : 0;
+    const picker = el("div", "editor-day-picker");
+    state.days.forEach((day, index) => {
+      const button = el("button", `editor-day-choice${index === activeEditDayIndex ? " active" : ""}`);
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(index === activeEditDayIndex));
+      button.append(el("span", "editor-day-choice-label", `DAY ${index + 1}`), el("strong", "", day.date || "日期待填"));
+      button.addEventListener("click", () => { readForm(); activeEditDayIndex = index; editDialog(); });
+      picker.append(button);
+    });
+    toolbar.insertAdjacentElement("afterend", picker);
+    if (!state.days.length) picker.insertAdjacentElement("afterend", el("div", "editor-empty", "目前沒有行程日，請新增一天開始編輯。"));
+    panel.querySelectorAll(".editor-day-card").forEach((card, index) => {
+      card.open = index === activeEditDayIndex;
+      card.style.display = index === activeEditDayIndex ? "" : "none";
+    });
   }
 
   function input(label, name, value, type = "text", placeholder = "") {
@@ -589,7 +612,7 @@
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
       return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>新增去程、回程或轉機航班，儲存後會顯示於頁首。</p><button type="button" class="edit-button" data-add-flight>＋ 新增航班</button></div>' + (cards || '<div class="editor-empty">尚未新增航班，按「新增航班」開始填寫。</div>');
     }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div><button type="button" class="edit-button" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === 0 ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div><button type="button" class="edit-button" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -622,12 +645,10 @@
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
     document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
     document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
-    document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
-    document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
-    document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); editDialog(); });
-    document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); state.days[Number(button.dataset.addItem)].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
+    document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
+    document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
-    document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); state.days.splice(Number(button.dataset.deleteDay),1); editDialog(); }));
+    document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); state.days.splice(Number(button.dataset.deleteDay),1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
     document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
     document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
     document.querySelectorAll("[data-delete-place]").forEach(button => button.addEventListener("click", () => { readForm(); const [key,i] = button.dataset.deletePlace.split("."); state.places[key].splice(Number(i),1); editDialog(); }));
@@ -858,6 +879,9 @@
       .trip-day-choice .trip-day-weather{font-size:9px;font-weight:800;color:#347b79;white-space:nowrap;line-height:1.15}
       .trip-day-choice.active .trip-day-weather{color:#fff}
       .trip-day-choice .trip-day-label{margin-top:1px}
+      .editor-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;max-width:55%}.editor-heading-actions .edit-button{white-space:nowrap;padding:8px 11px}.editor-heading-actions .editor-save-message{flex-basis:100%;text-align:right;min-height:16px;font-size:11px}
+      .edit-tabs{top:78px;z-index:14}.editor-day-picker{position:sticky;top:132px;z-index:13;display:flex;gap:8px;overflow-x:auto;margin:-6px -2px 12px;padding:9px 2px 12px;background:#f4f8f7;scrollbar-width:none}.editor-day-picker::-webkit-scrollbar{display:none}.editor-day-choice{flex:0 0 auto;min-width:76px;min-height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 11px;border:1px solid #dceceb;border-radius:15px;background:#fff;color:#61767b}.editor-day-choice-label{font-size:9px;font-weight:800;letter-spacing:.08em;color:#819198}.editor-day-choice strong{font-size:12px;color:#29484a}.editor-day-choice.active{border-color:#198e8b;background:#198e8b;color:#fff;box-shadow:0 5px 12px rgba(25,142,139,.18)}.editor-day-choice.active .editor-day-choice-label,.editor-day-choice.active strong{color:#fff}
+      @media(max-width:640px){.editor-heading{align-items:flex-start}.editor-heading-actions{gap:5px;max-width:58%}.editor-heading-actions .edit-button{padding:7px 9px;font-size:11px}.editor-heading-actions .editor-save-message{font-size:10px}.edit-tabs{top:72px;z-index:14}.editor-day-picker{top:124px;gap:6px;margin-top:-7px;padding-top:8px}.editor-day-choice{min-width:68px;min-height:56px;padding:7px 9px}}
     `; document.head.append(style);
   }
 
@@ -910,3 +934,4 @@
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
+
