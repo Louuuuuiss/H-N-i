@@ -168,7 +168,7 @@
       const selectedDay = state.days[activeDayIndex];
       const items = selectedDay?.items || [];
       const presentCategories = new Set(items.map(itineraryCategory));
-      const filterCategories = ["全部行程", "交通", "景點", "娛樂", "美食", ...[...presentCategories].filter(category => !["交通", "景點", "娛樂", "美食", "其他"].includes(category))];
+      const filterCategories = ["全部行程", "交通", "景點", "娛樂", "美食", ...[...presentCategories].filter(category => !["交通", "景點", "娛樂", "美食"].includes(category))];
       dayFilters.replaceChildren();
       filterCategories.forEach(category => {
         const active = category === activeDayFilter;
