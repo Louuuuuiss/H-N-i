@@ -74,6 +74,29 @@
     });
   }
 
+  function categoryMapLabel(category) {
+    const lower = String(category || "").toLocaleLowerCase();
+    if (lower === "bar") return "Bar";
+    if (lower === "barber") return "Barber";
+    return category || "未分類";
+  }
+
+  function mapCategoryIcon(key, category) {
+    if (key === "attractions") return "🏛";
+    if (key === "food") {
+      if (category === "米其林一星") return "⭐";
+      if (category === "必比登") return "🍲";
+      return "🍽";
+    }
+    const lower = String(category || "").toLocaleLowerCase();
+    if (lower === "spa" || category === "水療") return "♨";
+    if (lower === "barber") return "✂";
+    if (lower === "club") return "🎉";
+    if (lower === "ktv") return "🎤";
+    if (lower === "bar") return "🍸";
+    return "✨";
+  }
+
   function categoryMap() {
     const configs = {
       attractions: { type: "attraction", label: "景點", icon: "fa-landmark", color: "#2563eb", symbol: "🏛" },
@@ -82,12 +105,14 @@
     };
     return Object.entries(state.places).flatMap(([key, items]) => items.filter(x => Number.isFinite(Number(x.latitude)) && Number.isFinite(Number(x.longitude)) && x.latitude !== "" && x.longitude !== "").map(x => ({
       name: x.name, url: safeUrl(x.url) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.name)}`,
-      ...configs[key], label: x.category || configs[key].label, coords: [Number(x.latitude), Number(x.longitude)], symbol: configs[key].symbol
+      ...configs[key], label: x.category || configs[key].label, displayLabel: categoryMapLabel(x.category || configs[key].label),
+      coords: [Number(x.latitude), Number(x.longitude)], symbol: mapCategoryIcon(key, x.category)
     })));
   }
 
   function renderPage() {
     if (!state) return;
+    const savedPageScroll = window.scrollY;
     document.title = state.title || "旅行行程";
     const flag = document.querySelector("header .text-2xl"); if (flag && state.flag) flag.textContent = state.flag;
     const title = document.querySelector("header h1"); if (title) title.textContent = state.title;
@@ -121,13 +146,14 @@
         legend.append(button);
       };
       makeFilter("全部", "all");
-      [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => makeFilter(category, category));
+      [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => makeFilter(mapCategoryIcon(category === "景點" ? "attractions" : category === "米其林一星" || category === "必比登" || category === "米其林入選" ? "food" : "entertainment", category) + " " + categoryMapLabel(category), category));
     }
     if (typeof mapLocations !== "undefined") {
       mapLocations.splice(0, mapLocations.length, ...categoryMap());
       if (typeof pinElements !== "undefined") for (const [name, pin] of pinElements) if (!mapLocations.some(place => place.name === name)) { pin.remove(); pinElements.delete(name); }
       if (document.getElementById("sec-map") && !document.getElementById("sec-map").classList.contains("hidden") && typeof initializeTravelMap === "function") { if (typeof fitMapToPlaces === "function" && mapLocations.length) fitMapToPlaces(); initializeTravelMap(); }
     }
+    window.scrollTo(0, savedPageScroll);
   }
 
   function favoriteId(sectionId, item) {
@@ -273,7 +299,11 @@
 
   function editDialog() {
     if (!token) return loginDialog();
+    const previousPanel = document.querySelector(".editor-panel");
+    const scrollTop = previousPanel?.scrollTop || 0;
     showDialog(editorMarkup(), true);
+    const panel = document.querySelector(".editor-panel");
+    if (panel) panel.scrollTop = scrollTop;
     bindEditor();
   }
 
@@ -287,7 +317,30 @@
     if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
     if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${input("日期", `days.${i}.date`, day.date)}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${input("時間", `days.${i}.items.${j}.time`, item.time, "text", "例如 09:00-10:00")}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
-    return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${items.map((item, i) => `<details class="edit-card"><summary>${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${input("標籤", `places.${key}.${i}.category`, item.category, "text", key === "food" ? "例如 必比登" : "例如 SPA／Massage")}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
+    state.tagOptions ||= {};
+    state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
+    const tagTools = `<div class="edit-card"><div class="flex items-center justify-between gap-2"><strong class="text-sm">可用標籤</strong><button type="button" class="edit-button tiny secondary" data-add-tag="${key}">＋ 新增標籤</button></div><div class="flex flex-wrap gap-2 mt-2">${state.tagOptions[key].map(tag => `<span class="text-xs rounded-full border border-slate-200 bg-white px-3 py-1">${esc(tag)}</span>`).join("") || '<span class="text-xs text-slate-500">尚無標籤</span>'}</div></div>`;
+    const categoryInput = (item, i) => `<label class="edit-label">標籤<input class="edit-input" name="places.${key}.${i}.category" list="tag-options-${key}" value="${esc(item.category)}" placeholder="選擇或輸入標籤" /></label>`;
+    const tagList = `<datalist id="tag-options-${key}">${state.tagOptions[key].map(tag => `<option value="${esc(tag)}"></option>`).join("")}</datalist>`;
+    return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card"><summary>${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
+  }
+
+  function addTagDialog(key) {
+    showDialog(`<h2 class="text-xl font-bold mb-2">新增${labels[key]}標籤</h2><p class="text-sm text-slate-500 mb-4">建立後可在項目的標籤欄選用，儲存旅程後會保留。</p><form id="new-tag-form"><label class="edit-label">標籤名稱<input name="tag" class="edit-input" maxlength="100" required placeholder="例如 SPA／Massage" /></label><p id="tag-error" class="text-sm text-red-600 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>取消</button><button class="edit-button">新增標籤</button></div></form>`);
+    document.getElementById("new-tag-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const value = String(new FormData(event.currentTarget).get("tag") || "").trim();
+      state.tagOptions ||= {};
+      state.tagOptions[key] ||= [];
+      if (!value) return;
+      if (state.tagOptions[key].some(tag => tag.toLocaleLowerCase() === value.toLocaleLowerCase())) {
+        document.getElementById("tag-error").textContent = "這個標籤已存在。";
+        return;
+      }
+      state.tagOptions[key].push(value);
+      closeDialog();
+      editDialog();
+    });
   }
 
   function setPath(object, path, value) { const parts = path.split("."); let ref = object; for (let i = 0; i < parts.length - 1; i++) ref = ref[parts[i]]; ref[parts.at(-1)] = value; }
@@ -298,6 +351,7 @@
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
     document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); state.days.splice(Number(button.dataset.deleteDay),1); editDialog(); }));
     document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
+    document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
     document.querySelectorAll("[data-delete-place]").forEach(button => button.addEventListener("click", () => { readForm(); const [key,i] = button.dataset.deletePlace.split("."); state.places[key].splice(Number(i),1); editDialog(); }));
     document.getElementById("trip-form").addEventListener("submit", async event => {
       event.preventDefault(); readForm();
@@ -351,7 +405,7 @@
       actions.append(login); header.append(actions);
     }
     state = captureInitial();
-    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; renderPage(); } }
+    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
     if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
     await syncSharedFavorites(true);
