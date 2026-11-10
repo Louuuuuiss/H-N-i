@@ -347,7 +347,7 @@
           const category = itineraryCategory(item);
           const icons = { "交通": "✈️", "景點": "📍", "娛樂": "♨️", "美食": "🍜", "住宿": "🛏️", "其他": "✨" };
           top.append(el("span", "trip-entry-kind", (icons[category] || "✨") + " " + category));
-          detail.append(top, el("p", "trip-entry-description", item.description));
+          detail.append(top);
           row.append(detail);
           body.append(row);
         });
@@ -550,7 +550,8 @@
     if (!toolbar) return;
     activeEditDayIndex = state.days.length ? Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)) : 0;
     const picker = el("div", "editor-day-picker");
-    picker.id = "editor-day-picker";
+    const dayList = el("div", "editor-day-list");
+    dayList.id = "editor-day-list";
     state.days.forEach((day, index) => {
       const button = el("button", `editor-day-choice${index === activeEditDayIndex ? " active" : ""}`);
       button.type = "button";
@@ -562,14 +563,14 @@
       label.append(document.createTextNode(`DAY ${index + 1} `), el("i", "editor-day-drag-grip", "⠿"));
       button.append(label, el("strong", "", day.date || "日期待填"));
       button.addEventListener("click", () => { readForm(); activeEditDayIndex = index; editDialog(); });
-      picker.append(button);
+      dayList.append(button);
     });
     const addDay = el("button", "editor-day-add", "+");
     addDay.type = "button";
     addDay.dataset.addDay = "";
     addDay.setAttribute("aria-label", "新增天數");
     addDay.title = "新增天數";
-    picker.append(addDay);
+    picker.append(dayList, addDay);
     const sticky = el("div", "editor-day-sticky");
     sticky.append(picker);
     if (state.days.length) {
@@ -748,7 +749,7 @@
       const target = document.elementFromPoint(x, y)?.closest(itemSelector);
       if (!dragged || !target || target === dragged || target.parentElement !== root) return;
       const rect = target.getBoundingClientRect();
-      const before = root.id === "editor-day-picker" ? x < rect.left + rect.width / 2 : y < rect.top + rect.height / 2;
+      const before = root.id === "editor-day-list" ? x < rect.left + rect.width / 2 : y < rect.top + rect.height / 2;
       root.insertBefore(dragged, before ? target : target.nextSibling); changed = true;
     };
     const finish = () => {
@@ -778,7 +779,7 @@
       if (event.target.closest("[data-add-day],[data-add-item],[data-delete-item],[data-delete-day],[data-add-flight],[data-delete-flight],[data-add-place],[data-delete-place],[data-add-tag]")) editorHasUnsavedChanges = true;
     });
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
-    bindSortable(document.getElementById("editor-day-picker"), ".editor-day-choice", ".editor-day-drag-grip", ordered => {
+    bindSortable(document.getElementById("editor-day-list"), ".editor-day-choice", ".editor-day-drag-grip", ordered => {
       readForm();
       const selected = state.days[activeEditDayIndex];
       const anchor = state.days.map(day => calendarDateValue(day.date)).filter(Boolean).sort()[0];
@@ -1068,6 +1069,8 @@
       @media(max-width:640px){.editor-day-sticky{top:124px}.editor-day-fixed-actions{padding:9px;gap:6px}.editor-day-fixed-actions>strong{font-size:12px}.editor-day-fixed-buttons{gap:5px}.editor-day-fixed-buttons .edit-button{min-height:40px;padding:7px 8px;font-size:12px}.editor-day-choice{min-width:74px}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel,.editor-itinerary-row>.edit-label,.editor-itinerary-row>button{grid-column:2/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:2/-1}.editor-itinerary-row>button{justify-self:start}}
       .editor-place-toolbar{position:sticky;top:132px;z-index:13;display:flex;align-items:center;gap:8px;margin:0 -2px 9px;padding:8px 2px;background:#f4f8f7}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}.editor-place-actions>.edit-button{margin:0}.editor-place-add{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 44px;width:44px;height:44px;padding:0!important;border-radius:50%!important;font-size:25px!important;line-height:1;text-align:center}.editor-place-help{margin:0 2px 10px;color:#7b9092;font-size:12px}.editor-tag-manager{margin:0 0 12px;padding:0 12px;background:#fff;border:1px solid #dceceb;border-radius:14px;color:#526c6e}.editor-tag-manager>summary{padding:12px 0;font-size:13px;font-weight:750;cursor:pointer}.editor-tag-list{display:grid;gap:7px;padding:0 0 12px}.editor-tag-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e6efee;border-radius:10px;background:#f8fbfa;font-size:13px;font-weight:650}.editor-tag-entry>div{display:flex;gap:6px}.editor-tag-entry .edit-button{min-height:36px}.editor-itinerary-row{grid-template-columns:24px minmax(160px,.8fr) minmax(170px,1.1fr) auto}.editor-itinerary-row .time-point{padding:6px 8px}.editor-itinerary-row>[data-delete-item]{justify-self:start;width:auto;min-width:54px;max-width:78px;min-height:36px;padding:5px 9px;font-size:12px}
       @media(max-width:640px){.editor-place-toolbar{top:124px;gap:6px;align-items:center;flex-direction:row}.editor-place-filter-row{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto;padding:8px 12px;font-size:13px}.editor-place-actions{gap:5px}.editor-place-actions>[data-add-tag]{min-height:42px;padding:8px 10px}.editor-place-add{flex:0 0 42px;width:42px;height:42px}.editor-itinerary-row>[data-delete-item]{grid-column:2/-1}}
+      .editor-day-picker{display:flex;align-items:center;gap:8px;overflow:hidden}.editor-day-list{display:flex;align-items:center;flex:1 1 auto;min-width:0;gap:8px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;scroll-snap-type:x proximity}.editor-day-list::-webkit-scrollbar{display:none}.editor-day-choice{scroll-snap-align:start}.editor-day-picker>.editor-day-add{flex:0 0 46px;margin-left:auto}
+      @media(max-width:640px){.editor-day-picker{gap:6px}.editor-day-list{gap:6px}.editor-day-picker>.editor-day-add{flex-basis:42px}}
     `; document.head.append(style);
   }
 
