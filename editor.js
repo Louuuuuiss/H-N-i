@@ -422,7 +422,7 @@
 
   function editorMarkup() {
     const tabs = `<div class="edit-tabs">${[["trip", "基本資料"], ["flights", "航班"], ["days", "每日行程"], ["attractions", "景點"], ["entertainment", "娛樂"], ["food", "美食"]].map(([id, name]) => `<button type="button" class="edit-tab ${activeTab === id ? "active" : ""}" data-tab="${id}">${name}</button>`).join("")}</div>`;
-    return `<div class="flex items-start justify-between gap-3 mb-4"><div><h2 class="text-xl font-bold">編輯旅程</h2><p class="text-xs text-slate-500 mt-1">儲存後會同步到 Cloudflare，之後旅行可直接改內容。</p></div><button type="button" class="edit-button secondary" data-close>關閉</button></div>${tabs}<form id="trip-form">${tabContents()}<div class="flex justify-between gap-2 mt-5"><button type="button" id="logout-button" class="edit-button secondary">登出</button><button type="submit" class="edit-button">儲存變更</button></div><p id="save-message" class="text-sm text-slate-500 mt-2"></p></form>`;
+    return `<div class="editor-heading"><div><span class="editor-eyebrow">TRIP SETTINGS</span><h2>編輯旅程</h2><p>行程、航班與地點資料會同步儲存。</p></div><button type="button" class="edit-button secondary" data-close>完成</button></div>${tabs}<form id="trip-form" class="editor-form">${tabContents()}<div class="editor-savebar"><button type="button" id="logout-button" class="edit-button secondary">登出</button><span id="save-message" class="editor-save-message"></span><button type="submit" class="edit-button">儲存變更</button></div></form>`;
   }
 
   function input(label, name, value, type = "text", placeholder = "") { return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`; }
@@ -459,7 +459,7 @@
       '</div></div>';
   }
   function tabContents() {
-    if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
+    if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
     if (activeTab === "flights") {
       state.flights ||= [];
       const cards = state.flights.map((flight, i) => '<section class="edit-card editor-flight-card"><div class="editor-card-heading"><strong>' + esc(flight.direction || "航班") + ' · ' + esc(flight.flightNumber || "新航班") + '</strong><button type="button" class="edit-button tiny danger" data-delete-flight="' + i + '">移除此航班</button></div><div class="edit-grid flight-fields">' +
@@ -474,14 +474,14 @@
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
       return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>新增去程、回程或轉機航班，儲存後會顯示於頁首。</p><button type="button" class="edit-button" data-add-flight>＋ 新增航班</button></div>' + (cards || '<div class="editor-empty">尚未新增航班，按「新增航班」開始填寫。</div>');
     }
-        if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div><button type="button" class="edit-button" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === 0 ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
     const tagTools = `<div class="edit-card"><div class="flex items-center justify-between gap-2"><strong class="text-sm">可用標籤</strong><button type="button" class="edit-button tiny secondary" data-add-tag="${key}">＋ 新增標籤</button></div><div class="flex flex-wrap gap-2 mt-2">${state.tagOptions[key].map(tag => `<span class="text-xs rounded-full border border-slate-200 bg-white px-3 py-1">${esc(tag)}</span>`).join("") || '<span class="text-xs text-slate-500">尚無標籤</span>'}</div></div>`;
     const categoryInput = (item, i) => `<label class="edit-label">標籤<input class="edit-input" name="places.${key}.${i}.category" list="tag-options-${key}" value="${esc(item.category)}" placeholder="選擇或輸入標籤" /></label>`;
     const tagList = `<datalist id="tag-options-${key}">${state.tagOptions[key].map(tag => `<option value="${esc(tag)}"></option>`).join("")}</datalist>`;
-    return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card"><summary>${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
+    return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
   }
 
   function addTagDialog(key) {
@@ -685,6 +685,46 @@
       .flight-detail-line{display:grid;gap:3px;padding:9px 4px;border-top:1px solid #e5efed;font-size:11px;color:#526c6e}.flight-detail-line small{color:#819198}
       .editor-flight-card .flight-fields{padding:12px}.editor-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
       .editor-empty{padding:24px 16px;text-align:center;border:1px dashed #b8d8d6;border-radius:16px;color:#7b9092;background:#fff;font-size:13px}
+      /* Teal editor workspace styled to match the live travel planner. */
+      .editor-overlay{padding:18px;background:rgba(28,56,57,.42);backdrop-filter:blur(5px)}
+      .editor-panel,.editor-panel.wide{width:min(100%,900px);max-height:min(92vh,900px);padding:22px;background:#f4f8f7;border:1px solid #dceceb;border-radius:24px;color:#173b40;box-shadow:0 24px 70px rgba(18,65,68,.2)}
+      .editor-heading{position:sticky;top:-22px;z-index:12;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:-22px -22px 16px;padding:18px 22px 14px;background:linear-gradient(145deg,#fff 30%,#eaf8f6);border-bottom:1px solid #dceceb;border-radius:24px 24px 0 0}
+      .editor-heading h2{margin:2px 0;font-size:21px;font-weight:800;color:#173b40}
+      .editor-heading p,.editor-section-intro p,.days-toolbar p{margin:3px 0 0;color:#7b9092;font-size:12px;line-height:1.55}
+      .editor-eyebrow,.editor-section-kicker{display:block;color:#198e8b;font-size:10px;font-weight:800;letter-spacing:.17em}
+      .edit-tabs{position:sticky;top:78px;z-index:11;display:flex;flex-wrap:wrap;gap:7px;padding:10px;margin:0 0 16px;background:#e9f3f2;border:1px solid #dceceb;border-radius:16px;overflow:visible}
+      .edit-tab{padding:8px 13px;border:1px solid #d3e5e3;background:#fff;color:#61767b;font-weight:650}
+      .edit-tab.active{background:#198e8b!important;color:#fff!important;border:1px solid #198e8b!important;box-shadow:0 4px 10px rgba(25,142,139,.2)}
+      .edit-button{border:1px solid #198e8b!important;border-radius:11px;background:#198e8b!important;color:#fff!important;padding:9px 13px;font-weight:750;box-shadow:0 3px 9px rgba(25,142,139,.12)}
+      .edit-button.secondary{background:#fff!important;color:#267c7b!important;border:1px solid #c7e1df!important;box-shadow:none}
+      .edit-button.danger{background:#fff3f3!important;color:#bb6d75!important;border:1px solid #f0d6d9!important;box-shadow:none}
+      .edit-button:focus-visible,.edit-input:focus-visible{outline:2px solid #198e8b;outline-offset:2px}
+      .edit-input{min-height:42px;border-color:#d5e2e1;border-radius:11px;padding:10px 12px;color:#173b40;background:#fff}
+      .edit-input:focus{border-color:#63b9b4;box-shadow:0 0 0 3px rgba(25,142,139,.1)}
+      .edit-label{color:#526c6e;font-size:12px;font-weight:700;gap:6px}
+      .edit-grid{gap:13px}
+      .editor-section-intro{margin:4px 2px 16px;padding:15px 16px;background:#fff;border:1px solid #dceceb;border-radius:17px}
+      .editor-section-intro h3,.days-toolbar h3{margin:4px 0 0;color:#173b40;font-size:17px;font-weight:800}
+      .editor-section-intro .edit-button{margin-top:12px}
+      .trip-settings-grid{padding:4px 2px 10px}
+      .days-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 14px;padding:14px 16px;background:#fff;border:1px solid #dceceb;border-radius:17px}
+      .editor-day-card,.editor-place-card,.editor-flight-card{margin:10px 0;padding:0;background:#fff;border:1px solid #dceceb;border-radius:17px;overflow:hidden;box-shadow:0 4px 13px rgba(28,71,73,.04)}
+      .editor-card-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 17px;color:#173b40;font-size:14px;font-weight:800;cursor:pointer}
+      .editor-card-summary::marker{color:#198e8b}
+      .editor-day-card[open]>.editor-card-summary,.editor-place-card[open]>.editor-card-summary{border-bottom:1px solid #edf3f2;background:#fbfefd}
+      .editor-day-card>.edit-grid,.editor-day-card>.mt-3,.editor-place-card>.edit-grid,.editor-flight-card>.flight-fields,.editor-day-card>[data-delete-day],.editor-place-card>[data-delete-place]{margin:12px 15px}
+      .editor-day-card>.mt-3{padding:12px 13px;background:#f7faf9;border:1px solid #e7efee;border-radius:14px}
+      .editor-itinerary-row{grid-template-columns:minmax(160px,.8fr) minmax(170px,1.1fr) minmax(180px,1.3fr) auto;gap:10px;padding:13px 0;border-top:1px solid #e6efee}
+      .editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:auto;min-width:0}
+      .editor-itinerary-row .time-point{padding:9px;border-color:#dceceb;border-radius:12px;background:#fff}
+      .editor-itinerary-row .time-point>strong{color:#267c7b}
+      .time-wheel-group.single-time-wheel{min-width:0}
+      .editor-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border-bottom:1px solid #edf3f2;background:#fbfefd}
+      .editor-flight-card .flight-fields{padding:12px}
+      .editor-empty{padding:24px 16px;text-align:center;border:1px dashed #b8d8d6;border-radius:16px;color:#7b9092;background:#fff;font-size:13px}
+      .editor-savebar{position:sticky;bottom:-22px;z-index:12;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px -22px -22px;padding:13px 22px calc(13px + env(safe-area-inset-bottom,0));background:rgba(255,255,255,.96);border-top:1px solid #dceceb;border-radius:0 0 24px 24px;backdrop-filter:blur(12px)}
+      .editor-save-message{flex:1;color:#638082;font-size:12px;text-align:center}
+      @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;padding:16px 14px 0;border-radius:22px 22px 0 0}.editor-heading{top:-16px;margin:-16px -14px 13px;padding:16px 14px 12px;border-radius:22px 22px 0 0}.edit-tabs{top:72px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.edit-tabs::-webkit-scrollbar{display:none}.edit-tab{flex:0 0 auto}.days-toolbar{align-items:flex-start;padding:12px}.days-toolbar>.edit-button{flex:0 0 auto}.editor-day-card>.edit-grid,.editor-day-card>.mt-3,.editor-place-card>.edit-grid,.editor-flight-card>.flight-fields{margin:10px 11px}.editor-itinerary-row{grid-template-columns:1fr 1fr;gap:9px}.editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:1/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:1/-1}.editor-itinerary-row>button{justify-self:start}.editor-savebar{bottom:0;margin:16px -14px 0;padding:11px 14px calc(11px + env(safe-area-inset-bottom,0));border-radius:0}.editor-save-message{text-align:left}.editor-card-heading{padding:11px}.flight-fields{grid-template-columns:1fr}}
     `; document.head.append(style);
   }
 
