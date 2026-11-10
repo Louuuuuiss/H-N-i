@@ -105,7 +105,7 @@
     };
     return Object.entries(state.places).flatMap(([key, items]) => items.filter(x => Number.isFinite(Number(x.latitude)) && Number.isFinite(Number(x.longitude)) && x.latitude !== "" && x.longitude !== "").map(x => ({
       name: x.name, url: safeUrl(x.url) || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.name)}`,
-      ...configs[key], label: x.category || configs[key].label, displayLabel: categoryMapLabel(x.category || configs[key].label),
+      ...configs[key], label: categoryMapLabel(x.category || configs[key].label), displayLabel: categoryMapLabel(x.category || configs[key].label),
       coords: [Number(x.latitude), Number(x.longitude)], symbol: mapCategoryIcon(key, x.category)
     })));
   }
@@ -146,7 +146,7 @@
         legend.append(button);
       };
       makeFilter("全部", "all");
-      [...new Set(all.map(item => item.category).filter(Boolean))].forEach(category => makeFilter(mapCategoryIcon(category === "景點" ? "attractions" : category === "米其林一星" || category === "必比登" || category === "米其林入選" ? "food" : "entertainment", category) + " " + categoryMapLabel(category), category));
+      [...new Set(all.map(item => categoryMapLabel(item.category || "未分類")).filter(Boolean))].forEach(category => makeFilter(mapCategoryIcon(category === "景點" ? "attractions" : ["米其林一星", "必比登", "米其林入選"].includes(category) ? "food" : "entertainment", category) + " " + category, category));
     }
     if (typeof mapLocations !== "undefined") {
       mapLocations.splice(0, mapLocations.length, ...categoryMap());
