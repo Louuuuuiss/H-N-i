@@ -53,7 +53,9 @@
         }
         #map-tiles img.loaded { opacity: 1; }
         #map-controls { position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; flex-direction: column; gap: 4px; }
-        #map-popup { position: absolute; bottom: 12px; left: 12px; right: 56px; z-index: 30; }
+        #map-popup { position: absolute; left: 0; top: 0; right: auto; bottom: auto; width: min(220px, calc(100% - 24px)); z-index: 30; overflow: visible; }
+        #map-popup::before { content: ""; position: absolute; left: -7px; top: 16px; border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-right: 7px solid #fff; }
+        #map-popup[data-side="left"]::before { left: auto; right: -7px; border-right: 0; border-left: 7px solid #fff; }
         #map-warning {
             position: absolute; top: 12px; left: 12px; right: 56px; z-index: 25;
             background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 0.5rem;
@@ -867,6 +869,27 @@
                 pin.style.display = isVisible ? "block" : "none";
                 pin.classList.toggle('active', selectedPlace === place);
             });
+            if (selectedPlace) positionMapPopup(selectedPlace);
+        }
+
+        function positionMapPopup(place) {
+            const map = document.getElementById('travel-map');
+            const popup = document.getElementById('map-popup');
+            const pin = pinElements.get(place?.name);
+            if (!map || !popup || !pin || pin.style.display === 'none' || popup.classList.contains('hidden')) return;
+            const mapRect = map.getBoundingClientRect();
+            const pinRect = pin.getBoundingClientRect();
+            const width = popup.offsetWidth || 220;
+            const height = popup.offsetHeight || 88;
+            const gap = 10, margin = 8;
+            let left = pinRect.right - mapRect.left + gap;
+            let side = 'right';
+            if (left + width > map.clientWidth - margin) { left = pinRect.left - mapRect.left - width - gap; side = 'left'; }
+            left = Math.max(margin, Math.min(left, map.clientWidth - width - margin));
+            const top = Math.max(margin, Math.min(pinRect.top - mapRect.top + pinRect.height / 2 - height / 2, map.clientHeight - height - margin));
+            popup.style.left = left + 'px';
+            popup.style.top = top + 'px';
+            popup.dataset.side = side;
         }
 
         function showMapPopup(place) {
@@ -879,6 +902,7 @@
             popup.classList.remove('hidden');
             popup.querySelector('button').addEventListener('click', event => { event.stopPropagation(); closeMapPopup(); });
             popup.querySelector('.map-place-link')?.addEventListener('click', event => event.stopPropagation());
+            requestAnimationFrame(() => positionMapPopup(place));
             queueMapRender();
         }
         function closeMapPopup() {
@@ -1109,7 +1133,8 @@
     </script>
 
     <script>window.TRIP_API_URL = "https://hanoi-trip-editor-api.weiding741-0f0.workers.dev";</script>
-    <script src="./editor.js?v=daily-weather-forecast-20261111"></script>
+    <script src="./editor.js?v=editor-fixed-controls-map-bubble-20261111"></script>
 </body>
 </html>
+
 
