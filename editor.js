@@ -61,7 +61,8 @@
       dateRange: document.querySelector("header p")?.textContent.trim() || "",
       duration: document.querySelector("header span.bg-red-800")?.textContent.trim() || "",
       days,
-      places: { attractions: attractionItems, entertainment: entertainmentItems, food: foodItems }
+      places: { attractions: attractionItems, entertainment: entertainmentItems, food: foodItems },
+      flights: []
     };
   }
 
@@ -148,7 +149,42 @@
         dayPicker.id = "trip-day-picker";
         const header = document.querySelector("header");
         const headerRow = header?.querySelector(":scope > div");
-        if (header && headerRow) headerRow.insertAdjacentElement("afterend", dayPicker);
+        let flightSummary = document.getElementById("trip-flight-summary");
+        state.flights ||= [];
+        if (state.flights.length) {
+          if (!flightSummary) {
+            flightSummary = el("div", "flight-summary");
+            flightSummary.id = "trip-flight-summary";
+            if (header && headerRow) headerRow.insertAdjacentElement("afterend", flightSummary);
+          }
+          flightSummary.replaceChildren();
+          const toggle = el("button", "flight-summary-toggle");
+          toggle.type = "button";
+          toggle.setAttribute("aria-expanded", "false");
+          const flightLines = state.flights.map(flight => (flight.flightNumber || "航班待填") + " · " + (flight.departureTime || "--:--") + "→" + (flight.arrivalTime || "--:--") + " " + (flight.direction || ""));
+          const airlines = [...new Set(state.flights.map(flight => flight.airline).filter(Boolean))];
+          const copy = el("span", "flight-summary-copy");
+          copy.append(el("strong", "", flightLines.join("　/　")), el("small", "", (airlines.join("、") || "航班資訊") + " · 點擊展開航班資訊"));
+          toggle.append(el("span", "flight-summary-icon", "✈️"), copy, el("span", "flight-summary-chevron", "▾"));
+          const details = el("div", "flight-summary-details");
+          state.flights.forEach(flight => {
+            const line = el("div", "flight-detail-line");
+            line.append(el("strong", "", (flight.direction || "航班") + " · " + (flight.flightNumber || "航班待填")));
+            line.append(el("span", "", (flight.departureAirport || "出發地待填") + " → " + (flight.arrivalAirport || "抵達地待填")));
+            line.append(el("small", "", (flight.date || "") + ((flight.departureTime || flight.arrivalTime) ? "　" + (flight.departureTime || "--:--") + " → " + (flight.arrivalTime || "--:--") : "")));
+            if (flight.note) line.append(el("small", "", flight.note));
+            details.append(line);
+          });
+          toggle.addEventListener("click", () => {
+            const expanded = flightSummary.classList.toggle("expanded");
+            toggle.setAttribute("aria-expanded", String(expanded));
+          });
+          flightSummary.append(toggle, details);
+        } else {
+          flightSummary?.remove();
+          flightSummary = null;
+        }
+        if (header && headerRow) (flightSummary || headerRow).insertAdjacentElement("afterend", dayPicker);
         else itinerary.prepend(dayPicker);
       }
       dayPicker.replaceChildren();
@@ -165,39 +201,20 @@
         dayPicker.append(button);
       });
 
-      let dayFilters = document.getElementById("trip-day-filters");
-      if (!dayFilters) {
-        dayFilters = el("div", "trip-day-filters");
-        dayFilters.id = "trip-day-filters";
-        const heading = itinerary.querySelector("h2");
-        if (heading) heading.insertAdjacentElement("afterend", dayFilters);
-        else itinerary.prepend(dayFilters);
-      }
       const selectedDay = state.days[activeDayIndex];
       const items = selectedDay?.items || [];
-      const presentCategories = new Set(items.map(itineraryCategory));
-      const filterCategories = ["全部行程", "交通", "景點", "娛樂", "美食", ...[...presentCategories].filter(category => !["交通", "景點", "娛樂", "美食"].includes(category))];
-      dayFilters.replaceChildren();
-      filterCategories.forEach(category => {
-        const active = category === activeDayFilter;
-        const button = el("button", "trip-day-filter" + (active ? " active" : ""), category);
-        button.type = "button";
-        button.setAttribute("aria-pressed", String(active));
-        button.addEventListener("click", () => { activeDayFilter = category; renderPage(); });
-        dayFilters.append(button);
-      });
-      const visibleItems = items.filter(item => activeDayFilter === "全部行程" || itineraryCategory(item) === activeDayFilter);
-
       let overview = document.getElementById("trip-day-overview");
       if (!overview) {
         overview = el("div", "trip-day-overview");
         overview.id = "trip-day-overview";
-        dayFilters.insertAdjacentElement("afterend", overview);
+        const heading = itinerary.querySelector("h2");
+        if (heading) heading.insertAdjacentElement("afterend", overview);
+        else itinerary.prepend(overview);
       }
       overview.replaceChildren();
       const overviewCopy = el("div");
       overviewCopy.append(el("span", "trip-day-full-date", (selectedDay?.date || "日期待填") + "　·　DAY " + (activeDayIndex + 1)), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
-      overview.append(overviewCopy, el("span", "trip-day-count", visibleItems.length + " 個行程"));
+      overview.append(overviewCopy, el("span", "trip-day-count", items.length + " 個行程"));
 
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
       if (selectedDay) {
@@ -206,7 +223,7 @@
         const head = el("div", "trip-day-heading");
         head.append(el("span", "", "DAY " + (activeDayIndex + 1) + " · " + (selectedDay.date || "日期待填")), el("span", "trip-day-destination", selectedDay.destination || ""));
         const body = el("div", "trip-day-timeline");
-        visibleItems.forEach(item => {
+        items.forEach(item => {
           const row = el("div", "trip-entry");
           const range = String(item.time || "").split(/[-~～]/);
           row.append(el("time", "trip-entry-time", range[0] || item.time || ""));
@@ -402,7 +419,7 @@
   }
 
   function editorMarkup() {
-    const tabs = `<div class="edit-tabs">${[["trip", "基本資料"], ["days", "每日行程"], ["attractions", "景點"], ["entertainment", "娛樂"], ["food", "美食"]].map(([id, name]) => `<button type="button" class="edit-tab ${activeTab === id ? "active" : ""}" data-tab="${id}">${name}</button>`).join("")}</div>`;
+    const tabs = `<div class="edit-tabs">${[["trip", "基本資料"], ["flights", "航班"], ["days", "每日行程"], ["attractions", "景點"], ["entertainment", "娛樂"], ["food", "美食"]].map(([id, name]) => `<button type="button" class="edit-tab ${activeTab === id ? "active" : ""}" data-tab="${id}">${name}</button>`).join("")}</div>`;
     return `<div class="flex items-start justify-between gap-3 mb-4"><div><h2 class="text-xl font-bold">編輯旅程</h2><p class="text-xs text-slate-500 mt-1">儲存後會同步到 Cloudflare，之後旅行可直接改內容。</p></div><button type="button" class="edit-button secondary" data-close>關閉</button></div>${tabs}<form id="trip-form">${tabContents()}<div class="flex justify-between gap-2 mt-5"><button type="button" id="logout-button" class="edit-button secondary">登出</button><button type="submit" class="edit-button">儲存變更</button></div><p id="save-message" class="text-sm text-slate-500 mt-2"></p></form>`;
   }
 
@@ -441,7 +458,21 @@
   }
   function tabContents() {
     if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
-    if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+    if (activeTab === "flights") {
+      state.flights ||= [];
+      const cards = state.flights.map((flight, i) => '<section class="edit-card editor-flight-card"><div class="editor-card-heading"><strong>' + esc(flight.direction || "航班") + ' · ' + esc(flight.flightNumber || "新航班") + '</strong><button type="button" class="edit-button tiny danger" data-delete-flight="' + i + '">移除此航班</button></div><div class="edit-grid flight-fields">' +
+        input("航班日期", "flights." + i + ".date", flight.date, "date") +
+        input("去程／回程", "flights." + i + ".direction", flight.direction, "text", "例如 去程") +
+        input("航空公司", "flights." + i + ".airline", flight.airline) +
+        input("航班編號", "flights." + i + ".flightNumber", flight.flightNumber, "text", "例如 CI-100") +
+        input("出發時間", "flights." + i + ".departureTime", flight.departureTime, "time") +
+        input("抵達時間", "flights." + i + ".arrivalTime", flight.arrivalTime, "time") +
+        input("出發地／機場", "flights." + i + ".departureAirport", flight.departureAirport) +
+        input("目的地／機場", "flights." + i + ".arrivalAirport", flight.arrivalAirport) +
+        input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
+      return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>新增去程、回程或轉機航班，儲存後會顯示於頁首。</p><button type="button" class="edit-button" data-add-flight>＋ 新增航班</button></div>' + (cards || '<div class="editor-empty">尚未新增航班，按「新增航班」開始填寫。</div>');
+    }
+        if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -472,6 +503,8 @@
   function setPath(object, path, value) { const parts = path.split("."); let ref = object; for (let i = 0; i < parts.length - 1; i++) ref = ref[parts[i]]; ref[parts.at(-1)] = value; }
   function bindEditor() {
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
+    document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
+    document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
     document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); editDialog(); });
     document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); state.days[Number(button.dataset.addItem)].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
@@ -624,6 +657,21 @@
       nav .nav-btn:nth-child(5):before{content:"🗺️"}
       nav .nav-btn:before{display:block;font-size:18px;line-height:1.2}
       @media(min-width:700px){header.sticky{max-width:480px;margin:0 auto;border-radius:26px 26px 0 0}}
+      .flight-summary{margin:0;padding:0 16px 12px;background:linear-gradient(145deg,#fff 30%,#eaf8f6)}
+      .flight-summary-toggle{width:100%;display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid #dceceb;border-radius:15px;background:#fff;color:#173b40;text-align:left;box-shadow:0 4px 14px rgba(37,83,84,.06)}
+      .flight-summary-icon{flex:0 0 auto;font-size:19px}
+      .flight-summary-copy{display:grid;gap:3px;min-width:0;flex:1}
+      .flight-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+      .flight-summary-copy small{color:#819198;font-size:10px}
+      .flight-summary-chevron{color:#198e8b;transition:transform .15s}
+      .flight-summary.expanded .flight-summary-chevron{transform:rotate(180deg)}
+      .flight-summary-details{display:none;padding:5px 10px 0}
+      .flight-summary.expanded .flight-summary-details{display:block}
+      .flight-detail-line{display:grid;gap:3px;padding:9px 4px;border-top:1px solid #e5efed;font-size:11px;color:#526c6e}
+      .flight-detail-line small{color:#819198}
+      .editor-flight-card .flight-fields{padding:12px}
+      .editor-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+      .editor-empty{padding:22px;text-align:center;color:#819198;background:#fff;border:1px dashed #b8d8d6;border-radius:16px}
     `; document.head.append(style);
   }
 
@@ -657,7 +705,7 @@
       if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
     }
     state = captureInitial();
-    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; renderPage(); } }
+    try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; state.flights ||= []; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
     if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
     await syncSharedFavorites(true);
