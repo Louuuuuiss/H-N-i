@@ -129,8 +129,16 @@
     document.title = state.title || "旅行行程";
     const flag = document.querySelector("header .text-2xl"); if (flag && state.flag) flag.textContent = state.flag;
     const title = document.querySelector("header h1"); if (title) title.textContent = state.title;
-    const date = document.querySelector("header p"); if (date) date.textContent = state.dateRange;
-    const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration;
+    const date = document.querySelector("header p");
+    if (date) {
+      const matches = [...String(state.dateRange || "").matchAll(/(\d{1,2})\/(\d{1,2})/g)];
+      const monthNames = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+      const daysCount = String(state.duration || "").match(/(\d+)\s*天/);
+      date.textContent = matches.length >= 2
+        ? monthNames[Number(matches[0][1]) - 1] + " " + matches[0][2] + " — " + monthNames[Number(matches[1][1]) - 1] + " " + matches[1][2] + (daysCount ? "　·　" + daysCount[1] + " DAYS" : "")
+        : state.dateRange;
+    }
+    const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = "☀️　旅程準備就緒";
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
       if (state.days.length) activeDayIndex = Math.min(activeDayIndex, state.days.length - 1);
@@ -153,7 +161,7 @@
         button.setAttribute("aria-label", "前往第 " + (index + 1) + " 天：" + (day.date || "日期待填"));
         button.setAttribute("aria-pressed", String(index === activeDayIndex));
         button.append(el("span", "trip-day-number", weekday), el("strong", "trip-day-date", dateNumber), el("span", "trip-day-label", "DAY " + (index + 1)));
-        button.addEventListener("click", () => { activeDayIndex = index; renderPage(); });
+        button.addEventListener("click", () => { activeDayIndex = index; activeDayFilter = "全部行程"; renderPage(); });
         dayPicker.append(button);
       });
 
@@ -617,6 +625,13 @@
       nav.fixed.bottom-0{max-width:480px!important;left:50%!important;right:auto!important;width:min(100%,480px)!important;transform:translateX(-50%)}
       nav.fixed.bottom-0>div{max-width:480px!important}
       nav .nav-btn{font-size:10px}
+      nav .nav-btn i{display:none}
+      nav .nav-btn:nth-child(1):before{content:"🗓️"}
+      nav .nav-btn:nth-child(2):before{content:"📍"}
+      nav .nav-btn:nth-child(3):before{content:"♨️"}
+      nav .nav-btn:nth-child(4):before{content:"🍜"}
+      nav .nav-btn:nth-child(5):before{content:"🗺️"}
+      nav .nav-btn:before{display:block;font-size:18px;line-height:1.2}
       @media(min-width:700px){header.sticky{max-width:480px;margin:0 auto;border-radius:26px 26px 0 0}}
     `; document.head.append(style);
   }
