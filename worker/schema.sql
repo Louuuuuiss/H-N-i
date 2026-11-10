@@ -24,3 +24,8 @@ CREATE TABLE IF NOT EXISTS favorite_shares (
 );
 
 CREATE INDEX IF NOT EXISTS favorite_shares_expires_idx ON favorite_shares(expires);
+
+CREATE TABLE IF NOT EXISTS shared_favorites (
+  place_id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
