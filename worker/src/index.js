@@ -113,46 +113,18 @@ export default {
         return json({ saved: true }, 200, origin);
       }
 
-      if (url.pathname === "/api/favorites/share" && request.method === "POST") {
-        const body = await request.json().catch(() => null);
-        if (!body || !/^[a-f0-9-]{36}$/i.test(String(body.clientId || ""))) return json({ error: "識別碼不正確。" }, 400, origin);
-        const clientHash = await hmac(body.clientId, env.AUTH_SECRET);
-        if (!Array.isArray(body.favorites) || body.favorites.length > 1000 || body.favorites.some(id => typeof id !== "string" || id.length > 1000)) return json({ error: "收藏資料格式不正確。" }, 400, origin);
-        const favorites = [...new Set(body.favorites)];
-        if (!favorites.length) return json({ error: "目前沒有最愛項目可分享，請先加入景點、娛樂或美食。" }, 400, origin);
-        const token = randomToken();
-        const expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        await env.DB.prepare("INSERT INTO favorite_shares(token_hash, client_hash, favorite_ids, expires) VALUES(?, ?, ?, ?)").bind(await digest(token), clientHash, JSON.stringify(favorites), expires).run();
-        return json({ token, expiresIn: 30 * 24 * 60 * 60 }, 200, origin);
-      }
-
-      if (url.pathname === "/api/favorites/share" && request.method === "GET") {
-        const token = url.searchParams.get("token") || "";
-        if (!/^[a-f0-9]{64}$/i.test(token)) return json({ error: "分享連結不正確。" }, 400, origin);
-        const row = await env.DB.prepare("SELECT favorite_ids, expires FROM favorite_shares WHERE token_hash = ?").bind(await digest(token)).first();
-        if (!row || Number(row.expires) < Date.now()) {
-          if (row) await env.DB.prepare("DELETE FROM favorite_shares WHERE token_hash = ?").bind(await digest(token)).run();
-          return json({ error: "分享連結已逾期或不存在。" }, 410, origin);
-        }
-        return json({ favorites: JSON.parse(row.favorite_ids), expires: Number(row.expires) }, 200, origin);
-      }
-
       if (url.pathname === "/api/favorites" && request.method === "GET") {
-        const clientId = url.searchParams.get("clientId") || "";
-        if (!/^[a-f0-9-]{36}$/i.test(clientId)) return json({ error: "識別碼不正確。" }, 400, origin);
-        const clientHash = await hmac(clientId, env.AUTH_SECRET);
-        const rows = await env.DB.prepare("SELECT place_id FROM place_favorites WHERE client_hash = ?").bind(clientHash).all();
+        const rows = await env.DB.prepare("SELECT place_id FROM shared_favorites ORDER BY created_at, place_id").all();
         return json({ favorites: (rows.results || []).map(row => row.place_id) }, 200, origin);
       }
 
       if (url.pathname === "/api/favorites" && request.method === "POST") {
         const body = await request.json().catch(() => null);
-        if (!body || !/^[a-f0-9-]{36}$/i.test(String(body.clientId || "")) || typeof body.placeId !== "string" || body.placeId.length > 1000 || typeof body.favorite !== "boolean") return json({ error: "收藏資料格式不正確。" }, 400, origin);
-        const clientHash = await hmac(body.clientId, env.AUTH_SECRET);
+        if (!body || typeof body.placeId !== "string" || body.placeId.length > 1000 || typeof body.favorite !== "boolean") return json({ error: "收藏資料格式不正確。" }, 400, origin);
         if (body.favorite) {
-          await env.DB.prepare("INSERT INTO place_favorites(client_hash, place_id) VALUES(?, ?) ON CONFLICT(client_hash, place_id) DO NOTHING").bind(clientHash, body.placeId).run();
+          await env.DB.prepare("INSERT INTO shared_favorites(place_id) VALUES(?) ON CONFLICT(place_id) DO NOTHING").bind(body.placeId).run();
         } else {
-          await env.DB.prepare("DELETE FROM place_favorites WHERE client_hash = ? AND place_id = ?").bind(clientHash, body.placeId).run();
+          await env.DB.prepare("DELETE FROM shared_favorites WHERE place_id = ?").bind(body.placeId).run();
         }
         return json({ saved: true }, 200, origin);
       }
