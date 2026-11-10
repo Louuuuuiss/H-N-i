@@ -725,6 +725,17 @@
       .editor-savebar{position:sticky;bottom:-22px;z-index:12;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px -22px -22px;padding:13px 22px calc(13px + env(safe-area-inset-bottom,0));background:rgba(255,255,255,.96);border-top:1px solid #dceceb;border-radius:0 0 24px 24px;backdrop-filter:blur(12px)}
       .editor-save-message{flex:1;color:#638082;font-size:12px;text-align:center}
       @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;padding:16px 14px 0;border-radius:22px 22px 0 0}.editor-heading{top:-16px;margin:-16px -14px 13px;padding:16px 14px 12px;border-radius:22px 22px 0 0}.edit-tabs{top:72px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.edit-tabs::-webkit-scrollbar{display:none}.edit-tab{flex:0 0 auto}.days-toolbar{align-items:flex-start;padding:12px}.days-toolbar>.edit-button{flex:0 0 auto}.editor-day-card>.edit-grid,.editor-day-card>.mt-3,.editor-place-card>.edit-grid,.editor-flight-card>.flight-fields{margin:10px 11px}.editor-itinerary-row{grid-template-columns:1fr 1fr;gap:9px}.editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:1/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:1/-1}.editor-itinerary-row>button{justify-self:start}.editor-savebar{bottom:0;margin:16px -14px 0;padding:11px 14px calc(11px + env(safe-area-inset-bottom,0));border-radius:0}.editor-save-message{text-align:left}.editor-card-heading{padding:11px}.flight-fields{grid-template-columns:1fr}}
+      /* Keep the itinerary information fixed only on the itinerary tab. */
+      body[data-active-tab="sec-itinerary"] header.sticky{position:sticky!important;top:0!important;z-index:60!important;max-width:480px!important}
+      body:not([data-active-tab="sec-itinerary"]) header.sticky{display:none!important}
+      .trip-header-actions{margin-left:auto;flex:0 0 auto}
+      body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{position:sticky;top:0;z-index:55;display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:12px 2px;background:#f4f8f7;box-shadow:0 5px 12px rgba(37,83,84,.04)}
+      body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2 .trip-header-actions{margin-left:auto}
+      body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>.place-filters{position:sticky;top:48px;z-index:54;margin:0 0 10px;padding:9px 0 11px;background:#f4f8f7}
+      body:not([data-active-tab="sec-itinerary"]) #sec-map>.bg-white{position:sticky;top:48px;z-index:54;margin:0 0 10px;padding:10px;background:#f4f8f7;border:0!important;border-radius:0!important;box-shadow:0 5px 12px rgba(37,83,84,.04)!important}
+      body:not([data-active-tab="sec-itinerary"]) #sec-map #map-category-filter{gap:6px}
+      .map-pin{touch-action:none;user-select:none;-webkit-user-select:none}
+      @media(max-width:640px){body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{top:0;padding:10px 2px}.trip-header-actions .trip-editor-login{padding:7px 10px!important;font-size:11px}}
     `; document.head.append(style);
   }
 
@@ -750,12 +761,21 @@
     addStyles();
     const header = document.querySelector("header > div");
     if (header) {
-      const actions = el("div", "flex items-center gap-2");
+      const actions = el("div", "flex items-center gap-2 trip-header-actions");
       const login = el("button", "trip-editor-login", "登入編輯");
       login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
       actions.append(login); header.append(actions);
       const h1 = header.querySelector("h1");
       if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
+      const placeActions = tabId => {
+        if (tabId === "sec-itinerary") header.append(actions);
+        else {
+          const heading = document.querySelector("#" + tabId + " > h2");
+          if (heading) heading.append(actions);
+        }
+      };
+      window.addEventListener("trip:tab-change", event => placeActions(event.detail?.tabId || document.body.dataset.activeTab));
+      placeActions(document.body.dataset.activeTab || "sec-itinerary");
     }
     state = captureInitial();
     try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; state.tagOptions ||= {}; state.flights ||= []; renderPage(); } }
