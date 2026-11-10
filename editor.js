@@ -11,6 +11,7 @@
   const colors = { attractions: ["景點", "#2563eb", "🏛"], entertainment: ["娛樂", "#9333ea", "♨"], food: ["美食", "#dc2626", "🍜"] };
   let state;
   let activeTab = "days";
+  let activeDayIndex = 0;
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
 
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -120,43 +121,64 @@
     const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration;
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
+      if (state.days.length) activeDayIndex = Math.min(activeDayIndex, state.days.length - 1);
       let dayPicker = document.getElementById("trip-day-picker");
       if (!dayPicker) {
         dayPicker = el("div", "trip-day-picker");
         dayPicker.id = "trip-day-picker";
-        const heading = itinerary.querySelector("h2");
-        if (heading) heading.insertAdjacentElement("afterend", dayPicker);
+        const header = document.querySelector("header");
+        const headerRow = header?.querySelector(":scope > div");
+        if (header && headerRow) headerRow.insertAdjacentElement("afterend", dayPicker);
         else itinerary.prepend(dayPicker);
       }
       dayPicker.replaceChildren();
       state.days.forEach((day, index) => {
-        const button = el("button", "trip-day-choice" + (index === 0 ? " active" : ""));
+        const dateMatch = String(day.date || "").match(/(\d{1,2})\/(\d{1,2})\s*[（(]?\s*([一二三四五六日天])?/);
+        const weekday = { 一: "MON", 二: "TUE", 三: "WED", 四: "THU", 五: "FRI", 六: "SAT", 日: "SUN", 天: "SUN" }[dateMatch?.[3]] || "DAY";
+        const dateNumber = dateMatch?.[2] || String(index + 1);
+        const button = el("button", "trip-day-choice" + (index === activeDayIndex ? " active" : ""));
         button.type = "button";
-        button.setAttribute("aria-label", `前往第 ${index + 1} 天：${day.date || "日期待填"}`);
-        button.setAttribute("aria-pressed", String(index === 0));
-        button.append(el("span", "trip-day-number", `DAY ${index + 1}`), el("strong", "trip-day-date", day.date || "日期待填"));
-        if (day.destination) button.append(el("span", "trip-day-destination", day.destination));
-        button.addEventListener("click", () => {
-          const card = itinerary.querySelector(`.trip-day[data-day-index="${index}"]`);
-          card?.scrollIntoView({ behavior: "smooth", block: "start" });
-          dayPicker.querySelectorAll(".trip-day-choice").forEach((choice, choiceIndex) => {
-            const active = choiceIndex === index;
-            choice.classList.toggle("active", active);
-            choice.setAttribute("aria-pressed", String(active));
-          });
-        });
+        button.setAttribute("aria-label", "前往第 " + (index + 1) + " 天：" + (day.date || "日期待填"));
+        button.setAttribute("aria-pressed", String(index === activeDayIndex));
+        button.append(el("span", "trip-day-number", weekday), el("strong", "trip-day-date", dateNumber), el("span", "trip-day-label", "DAY " + (index + 1)));
+        button.addEventListener("click", () => { activeDayIndex = index; renderPage(); });
         dayPicker.append(button);
       });
+
+      let overview = document.getElementById("trip-day-overview");
+      if (!overview) {
+        overview = el("div", "trip-day-overview");
+        overview.id = "trip-day-overview";
+        const heading = itinerary.querySelector("h2");
+        if (heading) heading.insertAdjacentElement("afterend", overview);
+        else itinerary.prepend(overview);
+      }
+      const selectedDay = state.days[activeDayIndex];
+      overview.replaceChildren();
+      const overviewCopy = el("div");
+      overviewCopy.append(el("span", "trip-day-full-date", selectedDay?.date || "日期待填"), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
+      overview.append(overviewCopy, el("span", "trip-day-count", (selectedDay?.items?.length || 0) + " 個行程"));
+
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
-      state.days.forEach((day, index) => {
+      if (selectedDay) {
         const card = el("article", "trip-day bg-white rounded-xl shadow-sm border border-slate-100 mb-4 overflow-hidden");
-        card.dataset.dayIndex = String(index);
-        const head = el("div", "bg-slate-800 text-white px-4 py-2.5 flex justify-between items-center");
-        head.append(el("span", "font-bold text-sm", `DAY ${index + 1} · ${day.date || "日期待填"}`), el("span", "text-xs bg-slate-700 px-2 py-0.5 rounded", day.destination));
-        const body = el("div", "p-4 space-y-3");
-        day.items.forEach(item => { const row = el("div", "flex items-start gap-3 border-b border-slate-100 pb-2"); row.append(el("span", "text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded shrink-0 mt-0.5", item.time)); const detail = el("div"); detail.append(el("p", "font-semibold text-sm", item.title), el("p", "text-xs text-slate-500", item.description)); row.append(detail); body.append(row); });
-        card.append(head, body); itinerary.append(card);
-      });
+        card.dataset.dayIndex = String(activeDayIndex);
+        const head = el("div", "trip-day-heading");
+        head.append(el("span", "", "DAY " + (activeDayIndex + 1) + " · " + (selectedDay.date || "日期待填")), el("span", "trip-day-destination", selectedDay.destination || ""));
+        const body = el("div", "trip-day-timeline");
+        selectedDay.items.forEach(item => {
+          const row = el("div", "trip-entry");
+          const range = String(item.time || "").split(/[-~～]/);
+          row.append(el("time", "trip-entry-time", range[0] || item.time || ""));
+          const detail = el("div", "trip-entry-card");
+          detail.append(el("p", "trip-entry-title", item.title), el("p", "trip-entry-description", item.description));
+          if (range.length > 1 && range[1]) detail.append(el("span", "trip-entry-range", range[0] + "–" + range[1]));
+          row.append(detail);
+          body.append(row);
+        });
+        card.append(head, body);
+        itinerary.append(card);
+      }
     }
     renderCards("sec-attractions", state.places.attractions, "景點");
     renderCards("sec-entertainment", state.places.entertainment, "娛樂");
@@ -507,7 +529,37 @@
       nav .nav-btn:not(.active){color:#93a2a3!important}
       button:not(:disabled){transition:transform .12s ease,filter .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent}
       button:not(:disabled):active{transform:scale(.96);filter:brightness(.91);box-shadow:inset 0 2px 5px rgba(15,23,42,.16)}
-      @media(max-width:640px){main.max-w-md{padding:18px 14px 28px!important}.trip-day-choice{flex-basis:96px;min-height:104px}.trip-day .p-4>.flex>span:first-child{min-width:82px}.place-item>div{padding:12px!important}}
+      /* Match the approved preview: day strip in the header and one selected day timeline. */
+      header.sticky{position:relative!important;top:auto!important;border-radius:0 0 28px 28px;background:linear-gradient(145deg,#fff 30%,#eaf8f6)!important;padding-bottom:12px}
+      header.sticky>div:first-child{padding:22px 20px 12px!important;align-items:center}
+      header.sticky>div:first-child .text-2xl{font-size:1.6rem;line-height:1}
+      header.sticky>div:first-child h1{font-size:1.3rem}
+      header.sticky>div:first-child p{font-size:10px;letter-spacing:.12em;color:#819198!important}
+      #trip-day-picker{padding:12px 20px 15px;margin:0;gap:9px;background:transparent}
+      .trip-day-choice{flex:0 0 66px;min-height:88px;align-items:center;text-align:center;gap:2px;padding:9px 6px;border-radius:19px;background:#fff;box-shadow:0 4px 14px rgba(36,78,77,.07)}
+      .trip-day-choice .trip-day-number{font-size:10px;letter-spacing:.1em;color:#819198}
+      .trip-day-choice .trip-day-date{font-size:25px;margin:2px 0;color:#22313a}
+      .trip-day-choice .trip-day-label{font-size:9px;font-weight:800;color:#829297}
+      .trip-day-choice.active{background:#198e8b;color:#d6f4f2;transform:translateY(-2px)}
+      .trip-day-choice.active .trip-day-number,.trip-day-choice.active .trip-day-date,.trip-day-choice.active .trip-day-label{color:white}
+      #sec-itinerary>h2{display:none}
+      .trip-day-overview{display:flex;justify-content:space-between;align-items:end;gap:10px;margin:12px 2px 18px}
+      .trip-day-full-date{display:block;color:#829297;font-size:12px;font-weight:700;letter-spacing:.06em}
+      .trip-day-title{margin:4px 0 0;font-size:19px;font-weight:750;color:#22313a}
+      .trip-day-count{flex:0 0 auto;padding:7px 10px;border-radius:999px;background:#e5f5f3;color:#198e8b;font-size:11px}
+      .trip-day{background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important;margin:0!important}
+      .trip-day-heading{display:none}
+      .trip-day-timeline{position:relative;padding:0 0 8px}
+      .trip-day-timeline:before{content:"";position:absolute;left:52px;top:12px;bottom:18px;width:2px;background:linear-gradient(#198e8b,#cde9e6 92%,transparent)}
+      .trip-entry{display:grid;grid-template-columns:45px minmax(0,1fr);gap:15px;position:relative;margin-bottom:16px}
+      .trip-entry-time{padding-top:18px;text-align:right;font-family:Georgia,serif;font-size:13px;font-weight:700;color:#198e8b;white-space:nowrap}
+      .trip-entry:before{content:"";position:absolute;left:47px;top:22px;width:12px;height:12px;border:3px solid #198e8b;border-radius:50%;background:#fff;box-shadow:0 0 0 4px #e5f5f3;z-index:1}
+      .trip-entry-card{position:relative;min-width:0;padding:16px;background:#fff;border:1px solid #dceceb;border-radius:21px;box-shadow:0 10px 30px rgba(37,83,84,.08)}
+      .trip-entry-title{margin:0 0 6px;font-size:15px;font-weight:750;color:#22313a}
+      .trip-entry-description{margin:0;color:#819198;font-size:12px;line-height:1.65}
+      .trip-entry-range{display:inline-flex;margin-top:11px;padding:5px 8px;border-radius:9px;background:#edf8f7;color:#307a78;font-size:10px}
+      @media(max-width:640px){header.sticky>div:first-child{padding:20px 18px 10px!important}#trip-day-picker{padding-left:18px;padding-right:18px}.trip-entry{grid-template-columns:42px minmax(0,1fr);gap:14px}.trip-day-timeline:before{left:48px}.trip-entry:before{left:43px}.trip-entry-card{padding:14px}}
+      @media(min-width:700px){header.sticky{max-width:480px;margin:0 auto;border-radius:26px 26px 0 0}}
     `; document.head.append(style);
   }
 
