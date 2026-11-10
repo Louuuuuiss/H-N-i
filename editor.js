@@ -14,6 +14,8 @@
   let activeDayIndex = 0;
   let activeEditDayIndex = 0;
   let activeDayFilter = "全部行程";
+  let editorHasUnsavedChanges = false;
+  const placeEditFilters = { attractions: "all", entertainment: "all", food: "all" };
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
   let weatherCache = { location: "", promise: null, data: null, loadedAt: 0 };
 
@@ -171,6 +173,18 @@
       output.textContent = weatherIcon(code, 1) + " " + Math.round(Number(high)) + "°/" + Math.round(Number(low)) + "°";
       output.title = weatherDescription(code) + " · 最高 " + Math.round(Number(high)) + "°C，最低 " + Math.round(Number(low)) + "°C";
     });
+    const credit = document.getElementById("trip-weather-credit");
+    if (credit) {
+      const date = resolveTripDate(state.days[activeDayIndex]?.date);
+      const index = (daily.time || []).indexOf(date);
+      const region = [data.place || location, data.country].filter(Boolean).join(", ");
+      const high = daily.temperature_2m_max?.[index], low = daily.temperature_2m_min?.[index];
+      const code = Number(daily.weather_code?.[index]);
+      credit.textContent = index >= 0 && high != null && low != null
+        ? region + " · " + weatherIcon(code, 1) + " " + weatherDescription(code) + " · 最高 " + Math.round(Number(high)) + "° / 最低 " + Math.round(Number(low)) + "° · Weather by Open-Meteo"
+        : region + " · 當日天氣預報尚未提供 · Weather by Open-Meteo";
+      credit.title = "行程日期：" + (state.days[activeDayIndex]?.date || "未設定日期");
+    }
   }
   async function fetchTripWeather(location) {
     const geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(location) + "&count=1&language=zh&format=json";
@@ -188,33 +202,20 @@
     const weather = await weatherResponse.json();
     return { place: place.name, country: place.country, current: weather.current, daily: weather.daily };
   }
-  function refreshWeatherBadge() {
-    const badge = document.querySelector("header span.bg-red-800");
+  function refreshTripWeather() {
     const location = String(state?.weatherLocation || "").trim();
-    if (!badge || !state || document.body.dataset.activeTab !== "sec-itinerary") return;
-    if (!location) {
-      badge.textContent = "☀️　旅程準備就緒";
-      badge.title = "登入編輯並設定天氣地區，即可顯示當地天氣";
-      return;
-    }
+    if (!state || !location) return;
     const show = data => {
       if (String(state?.weatherLocation || "").trim() !== location) return;
-      const current = data.current || {};
-      const temp = Number.isFinite(Number(current.temperature_2m)) ? Math.round(Number(current.temperature_2m)) + "°C" : "--°";
-      const code = Number(current.weather_code);
-      badge.textContent = weatherIcon(code, Number(current.is_day)) + "　" + temp + " · " + weatherDescription(code);
-      badge.title = location + " · " + [data.place, data.country].filter(Boolean).join(", ") + " · Open-Meteo";
       renderDayWeather(location, data);
     };
     if (weatherCache.location === location && weatherCache.data && Date.now() - weatherCache.loadedAt < 30 * 60 * 1000) {
       show(weatherCache.data); return;
     }
     if (weatherCache.location === location && weatherCache.promise) {
-      badge.textContent = "🌤️　正在讀取天氣…";
-      weatherCache.promise.then(show).catch(() => { badge.textContent = "🌦️　天氣暫不可用"; });
+      weatherCache.promise.then(show).catch(() => {});
       return;
     }
-    badge.textContent = "🌤️　正在讀取天氣…";
     const promise = fetchTripWeather(location);
     weatherCache = { location, promise, data: null, loadedAt: 0 };
     promise.then(data => {
@@ -222,10 +223,6 @@
       show(data);
     }).catch(() => {
       if (weatherCache.location === location) weatherCache = { location, promise: null, data: null, loadedAt: Date.now() };
-      if (String(state?.weatherLocation || "").trim() === location) {
-        badge.textContent = "🌦️　天氣暫不可用";
-        badge.title = "請確認地區名稱，或稍後重試";
-      }
     });
   }
 
@@ -278,8 +275,8 @@
         ? monthNames[Number(matches[0][1]) - 1] + " " + matches[0][2] + " — " + monthNames[Number(matches[1][1]) - 1] + " " + matches[1][2] + (daysCount ? "　·　" + daysCount[1] + " DAYS" : "")
         : state.dateRange;
     }
-    const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = "☀️　旅程準備就緒";
-    refreshWeatherBadge();
+    const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = state.duration || "";
+    refreshTripWeather();
     renderFlightSummary();
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
@@ -325,11 +322,13 @@
       const overviewCopy = el("div");
       overviewCopy.append(el("span", "trip-day-full-date", (selectedDay?.date || "日期待填") + "　·　DAY " + (activeDayIndex + 1)), el("h3", "trip-day-title", selectedDay?.destination || "每日行程"));
       if (state.weatherLocation) {
-        const credit = el("a", "weather-credit", state.weatherLocation + " · Weather by Open-Meteo");
+        const credit = el("a", "weather-credit", state.weatherLocation + " · 正在讀取當日天氣 · Weather by Open-Meteo");
+        credit.id = "trip-weather-credit";
         credit.href = "https://open-meteo.com/"; credit.target = "_blank"; credit.rel = "noopener noreferrer";
         overviewCopy.append(credit);
       }
       overview.append(overviewCopy, el("span", "trip-day-count", items.length + " 個行程"));
+      if (weatherCache.location === String(state.weatherLocation || "").trim() && weatherCache.data) renderDayWeather(weatherCache.location, weatherCache.data);
 
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
       if (selectedDay) {
@@ -510,7 +509,7 @@
     showDialog(`<h2 class="text-xl font-bold mb-2">管理者登入</h2><p class="text-sm text-slate-500 mb-4">輸入密碼進入行程編輯模式。</p><form id="login-form"><label class="edit-label">密碼<input name="password" type="password" autocomplete="current-password" required class="edit-input" /></label><p id="login-error" class="text-sm text-red-600 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>取消</button><button class="edit-button">登入</button></div></form>`);
     document.getElementById("login-form").addEventListener("submit", async event => {
       event.preventDefault(); const error = document.getElementById("login-error");
-      try { const result = await api("/api/login", { method: "POST", body: JSON.stringify({ password: new FormData(event.currentTarget).get("password") }) }); token = result.token; sessionStorage.setItem(TOKEN_KEY, token); closeDialog(); editDialog(); }
+      try { const result = await api("/api/login", { method: "POST", body: JSON.stringify({ password: new FormData(event.currentTarget).get("password") }) }); token = result.token; sessionStorage.setItem(TOKEN_KEY, token); editorHasUnsavedChanges = false; closeDialog(); editDialog(); }
       catch (err) { error.textContent = err.message; }
     });
   }
@@ -519,7 +518,14 @@
     closeDialog();
     const overlay = el("div", "editor-overlay"); overlay.id = "trip-editor-overlay";
     const panel = el("div", `editor-panel${wide ? " wide" : ""}`); panel.innerHTML = content;
-    overlay.append(panel); overlay.addEventListener("click", event => { if (event.target.closest("[data-close]")) closeDialog(); }); document.body.append(overlay);
+    overlay.append(panel); overlay.addEventListener("click", event => {
+      if (!event.target.closest("[data-close]")) return;
+      if (panel.querySelector("#trip-form") && editorHasUnsavedChanges && !window.confirm("有尚未儲存的修改，確定離開編輯畫面嗎？")) return;
+      const returnToEditor = Boolean(panel.querySelector("#new-tag-form"));
+      if (panel.querySelector("#trip-form")) editorHasUnsavedChanges = false;
+      closeDialog();
+      if (returnToEditor) editDialog();
+    }); document.body.append(overlay);
   }
   function closeDialog() { document.getElementById("trip-editor-overlay")?.remove(); }
 
@@ -552,6 +558,12 @@
       button.addEventListener("click", () => { readForm(); activeEditDayIndex = index; editDialog(); });
       picker.append(button);
     });
+    const addDay = el("button", "editor-day-add", "+");
+    addDay.type = "button";
+    addDay.dataset.addDay = "";
+    addDay.setAttribute("aria-label", "新增天數");
+    addDay.title = "新增天數";
+    picker.append(addDay);
     toolbar.insertAdjacentElement("afterend", picker);
     if (!state.days.length) picker.insertAdjacentElement("afterend", el("div", "editor-empty", "目前沒有行程日，請新增一天開始編輯。"));
     panel.querySelectorAll(".editor-day-card").forEach((card, index) => {
@@ -596,30 +608,39 @@
       '<label>分<select class="edit-input time-wheel" aria-label="' + label + '時間分鐘" name="' + base + 'Minute">' + timeUnitOptions(59, values[1]) + '</select></label>' +
       '</div></div>';
   }
+  function flightTimeEditor(label, name, value) {
+    const [hour, minute] = readSingleTime(value);
+    return '<label class="edit-label flight-time-editor">' + esc(label) + '（24 小時制）<div class="time-units">' +
+      '<label>時<select class="edit-input time-wheel" name="' + name + 'Hour" aria-label="' + esc(label) + '小時">' + timeUnitOptions(23, hour) + '</select></label>' +
+      '<label>分<select class="edit-input time-wheel" name="' + name + 'Minute" aria-label="' + esc(label) + '分鐘">' + timeUnitOptions(59, minute) + '</select></label>' +
+      '</div></label>';
+  }
   function tabContents() {
     if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}${input("天氣地區", "weatherLocation", state.weatherLocation || "", "text", "例如 Hanoi, Vietnam")}</div>`;
     if (activeTab === "flights") {
       state.flights ||= [];
       const cards = state.flights.map((flight, i) => '<section class="edit-card editor-flight-card"><div class="editor-card-heading"><strong>' + esc(flight.direction || "航班") + ' · ' + esc(flight.flightNumber || "新航班") + '</strong><button type="button" class="edit-button tiny danger" data-delete-flight="' + i + '">移除此航班</button></div><div class="edit-grid flight-fields">' +
         input("航班日期", "flights." + i + ".date", flight.date, "date") +
-        input("去程／回程", "flights." + i + ".direction", flight.direction, "text", "例如 去程") +
+        '<label class="edit-label">航程<select class="edit-input" name="flights.' + i + '.direction"><option value="去程"' + (flight.direction === "去程" ? " selected" : "") + '>去程</option><option value="回程"' + (flight.direction === "回程" ? " selected" : "") + '>回程</option></select></label>' +
         input("航空公司", "flights." + i + ".airline", flight.airline) +
         input("航班編號", "flights." + i + ".flightNumber", flight.flightNumber, "text", "例如 CI-100") +
-        input("出發時間", "flights." + i + ".departureTime", flight.departureTime, "time") +
-        input("抵達時間", "flights." + i + ".arrivalTime", flight.arrivalTime, "time") +
+        flightTimeEditor("出發時間", "flights." + i + ".departureTime", flight.departureTime) +
+        flightTimeEditor("抵達時間", "flights." + i + ".arrivalTime", flight.arrivalTime) +
         input("出發地／機場", "flights." + i + ".departureAirport", flight.departureAirport) +
         input("目的地／機場", "flights." + i + ".arrivalAirport", flight.arrivalAirport) +
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
-      return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>新增去程、回程或轉機航班，儲存後會顯示於頁首。</p><button type="button" class="edit-button" data-add-flight>＋ 新增航班</button></div>' + (cards || '<div class="editor-empty">尚未新增航班，按「新增航班」開始填寫。</div>');
+      return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>使用 24 小時制設定航班時間，可選擇去程或回程。</p><div class="flight-add-actions"><button type="button" class="edit-button" data-add-flight="去程">＋ 新增去程</button><button type="button" class="edit-button secondary" data-add-flight="回程">＋ 新增回程</button></div></div>' + (cards || '<div class="editor-empty">尚未新增航班，請新增去程或回程航班。</div>');
     }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div><button type="button" class="edit-button" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期、摘要與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
     const tagTools = `<div class="edit-card"><div class="flex items-center justify-between gap-2"><strong class="text-sm">可用標籤</strong><button type="button" class="edit-button tiny secondary" data-add-tag="${key}">＋ 新增標籤</button></div><div class="flex flex-wrap gap-2 mt-2">${state.tagOptions[key].map(tag => `<span class="text-xs rounded-full border border-slate-200 bg-white px-3 py-1">${esc(tag)}</span>`).join("") || '<span class="text-xs text-slate-500">尚無標籤</span>'}</div></div>`;
+    const activePlaceFilter = placeEditFilters[key] || "all";
+    const placeFilters = `<div class="editor-place-filter-row" aria-label="依標籤篩選${labels[key]}">${[["all", "全部"], ...state.tagOptions[key].map(tag => [tag, tag])].map(([value, title]) => `<button type="button" class="editor-place-filter${value === activePlaceFilter ? " active" : ""}" data-place-filter="${esc(value)}">${esc(title)}</button>`).join("")}</div>`;
     const categoryInput = (item, i) => `<label class="edit-label">標籤<input class="edit-input" name="places.${key}.${i}.category" list="tag-options-${key}" value="${esc(item.category)}" placeholder="選擇或輸入標籤" /></label>`;
     const tagList = `<datalist id="tag-options-${key}">${state.tagOptions[key].map(tag => `<option value="${esc(tag)}"></option>`).join("")}</datalist>`;
-    return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">管理${labels[key]}名稱、標籤、描述、外部連結及選填座標。</p><button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
+    return `<div class="editor-place-toolbar">${placeFilters}<button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div><p class="editor-place-help">可依標籤篩選後編輯${labels[key]}，也可新增標籤、描述與連結。</p>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card" data-place-category="${esc(item.category || "未分類")}"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
   }
 
   function addTagDialog(key) {
@@ -635,15 +656,30 @@
         return;
       }
       state.tagOptions[key].push(value);
+      editorHasUnsavedChanges = true;
       closeDialog();
       editDialog();
     });
   }
 
   function setPath(object, path, value) { const parts = path.split("."); let ref = object; for (let i = 0; i < parts.length - 1; i++) ref = ref[parts[i]]; ref[parts.at(-1)] = value; }
+  function applyEditorPlaceFilter(key) {
+    const selected = placeEditFilters[key] || "all";
+    document.querySelectorAll(".editor-place-card").forEach(card => {
+      card.style.display = selected === "all" || card.dataset.placeCategory === selected ? "" : "none";
+    });
+    document.querySelectorAll("[data-place-filter]").forEach(button => button.classList.toggle("active", button.dataset.placeFilter === selected));
+  }
   function bindEditor() {
+    const form = document.getElementById("trip-form");
+    form.addEventListener("input", () => { editorHasUnsavedChanges = true; });
+    form.addEventListener("change", () => { editorHasUnsavedChanges = true; });
+    form.addEventListener("click", event => {
+      if (event.target.closest("[data-add-day],[data-add-item],[data-delete-item],[data-delete-day],[data-add-flight],[data-delete-flight],[data-add-place],[data-delete-place],[data-add-tag]")) editorHasUnsavedChanges = true;
+    });
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
-    document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
+    document.querySelectorAll("[data-place-filter]").forEach(button => button.addEventListener("click", () => { readForm(); placeEditFilters[activeTab] = button.dataset.placeFilter; applyEditorPlaceFilter(activeTab); }));
+    document.querySelectorAll("[data-add-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: button.dataset.addFlight || "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
     document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
     document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
@@ -655,16 +691,16 @@
     document.getElementById("trip-form").addEventListener("submit", async event => {
       event.preventDefault(); readForm();
       const msg = document.getElementById("save-message"); msg.textContent = "正在儲存…";
-      try { await api("/api/content", { method: "POST", body: JSON.stringify({ content: state }) }); renderPage(); msg.textContent = "已儲存到 Cloudflare。"; }
+      try { await api("/api/content", { method: "POST", body: JSON.stringify({ content: state }) }); editorHasUnsavedChanges = false; renderPage(); msg.textContent = "已儲存到 Cloudflare。"; }
       catch (error) { msg.textContent = error.message; }
     });
-    document.getElementById("logout-button").addEventListener("click", async () => { try { await api("/api/logout", { method: "POST", body: "{}" }); } catch {} token = ""; sessionStorage.removeItem(TOKEN_KEY); closeDialog(); });
+    document.getElementById("logout-button").addEventListener("click", async () => { if (editorHasUnsavedChanges && !window.confirm("有尚未儲存的修改，確定登出並放棄嗎？")) return; try { await api("/api/logout", { method: "POST", body: "{}" }); } catch {} editorHasUnsavedChanges = false; token = ""; sessionStorage.removeItem(TOKEN_KEY); closeDialog(); });
   }
   function readForm() {
     const form = document.getElementById("trip-form"); if (!form) return;
     const data = new FormData(form);
     for (const [path, value] of data) {
-      if (!path || path.endsWith(".calendarDate") || /\.time(Hour|Minute)$/.test(path)) continue;
+      if (!path || path.endsWith(".calendarDate") || /\.time(Hour|Minute)$/.test(path) || /^flights\.\d+\.(departure|arrival)Time(Hour|Minute)$/.test(path)) continue;
       setPath(state, path, value);
     }
     for (let i = 0; i < state.days.length; i++) {
@@ -674,6 +710,13 @@
         const path = "days." + i + ".items." + j;
         const time = ["Hour", "Minute"].map(unit => data.get(path + ".time" + unit));
         if (time.every(value => value !== null)) state.days[i].items[j].time = time.join(":");
+      }
+    }
+    for (let i = 0; i < (state.flights || []).length; i++) {
+      for (const endpoint of ["departureTime", "arrivalTime"]) {
+        const hour = data.get("flights." + i + "." + endpoint + "Hour");
+        const minute = data.get("flights." + i + "." + endpoint + "Minute");
+        if (hour !== null && minute !== null) state.flights[i][endpoint] = String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
       }
     }
   }
@@ -882,6 +925,8 @@
       .editor-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;max-width:55%}.editor-heading-actions .edit-button{white-space:nowrap;padding:8px 11px}.editor-heading-actions .editor-save-message{flex-basis:100%;text-align:right;min-height:16px;font-size:11px}
       .edit-tabs{top:78px;z-index:14}.editor-day-picker{position:sticky;top:132px;z-index:13;display:flex;gap:8px;overflow-x:auto;margin:-6px -2px 12px;padding:9px 2px 12px;background:#f4f8f7;scrollbar-width:none}.editor-day-picker::-webkit-scrollbar{display:none}.editor-day-choice{flex:0 0 auto;min-width:76px;min-height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 11px;border:1px solid #dceceb;border-radius:15px;background:#fff;color:#61767b}.editor-day-choice-label{font-size:9px;font-weight:800;letter-spacing:.08em;color:#819198}.editor-day-choice strong{font-size:12px;color:#29484a}.editor-day-choice.active{border-color:#198e8b;background:#198e8b;color:#fff;box-shadow:0 5px 12px rgba(25,142,139,.18)}.editor-day-choice.active .editor-day-choice-label,.editor-day-choice.active strong{color:#fff}
       @media(max-width:640px){.editor-heading{align-items:flex-start}.editor-heading-actions{gap:5px;max-width:58%}.editor-heading-actions .edit-button{padding:7px 9px;font-size:11px}.editor-heading-actions .editor-save-message{font-size:10px}.edit-tabs{top:72px;z-index:14}.editor-day-picker{top:124px;gap:6px;margin-top:-7px;padding-top:8px}.editor-day-choice{min-width:68px;min-height:56px;padding:7px 9px}}
+      .editor-day-add{flex:0 0 46px;width:46px;height:46px;align-self:center;border:1px dashed #198e8b;border-radius:50%;background:#e9f6f5;color:#198e8b;font-size:27px;line-height:1;font-weight:500}.editor-place-toolbar{display:flex;align-items:center;gap:10px;margin:4px 2px 5px}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-filter{padding:7px 12px;border:1px solid #d3e5e3;border-radius:999px;background:#fff;color:#61767b;font-size:12px;font-weight:700;white-space:nowrap}.editor-place-filter.active{background:#198e8b;color:#fff;border-color:#198e8b;box-shadow:0 3px 9px rgba(25,142,139,.15)}.editor-place-help{margin:0 2px 12px;color:#7b9092;font-size:11px}.editor-place-toolbar>.edit-button{flex:0 0 auto}.flight-add-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.flight-add-actions .edit-button{margin-top:0!important}.flight-time-editor>.time-units{margin-top:6px}.flight-time-editor .time-wheel{font-size:14px}
+      @media(max-width:640px){.editor-day-add{width:42px;height:42px;flex-basis:42px}.editor-place-toolbar{align-items:flex-start;flex-direction:column}.editor-place-toolbar>.edit-button{align-self:flex-end}.editor-place-filter-row{width:100%;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto}}
     `; document.head.append(style);
   }
 
@@ -909,7 +954,7 @@
     if (header) {
       const actions = el("div", "flex items-center gap-2 trip-header-actions");
       const login = el("button", "trip-editor-login", "登入編輯");
-      login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
+      login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editorHasUnsavedChanges = false; editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
       actions.append(login); header.append(actions);
       const h1 = header.querySelector("h1");
       if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
@@ -920,7 +965,7 @@
           if (heading) heading.append(actions);
         }
       };
-      window.addEventListener("trip:tab-change", event => { const tabId = event.detail?.tabId || document.body.dataset.activeTab; placeActions(tabId); if (tabId === "sec-itinerary") refreshWeatherBadge(); });
+      window.addEventListener("trip:tab-change", event => { const tabId = event.detail?.tabId || document.body.dataset.activeTab; placeActions(tabId); if (tabId === "sec-itinerary") refreshTripWeather(); });
       placeActions(document.body.dataset.activeTab || "sec-itinerary");
     }
     state = captureInitial();
