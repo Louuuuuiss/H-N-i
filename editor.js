@@ -676,12 +676,12 @@
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
-    const tagTools = `<div class="edit-card"><div class="flex items-center justify-between gap-2"><strong class="text-sm">可用標籤</strong><button type="button" class="edit-button tiny secondary" data-add-tag="${key}">＋ 新增標籤</button></div><div class="flex flex-wrap gap-2 mt-2">${state.tagOptions[key].map(tag => `<span class="text-xs rounded-full border border-slate-200 bg-white px-3 py-1">${esc(tag)}</span>`).join("") || '<span class="text-xs text-slate-500">尚無標籤</span>'}</div></div>`;
     const activePlaceFilter = placeEditFilters[key] || "all";
     const placeFilters = `<div class="editor-place-filter-row" aria-label="依標籤篩選${labels[key]}">${[["all", "全部"], ...state.tagOptions[key].map(tag => [tag, tag])].map(([value, title]) => `<button type="button" class="editor-place-filter${value === activePlaceFilter ? " active" : ""}" data-place-filter="${esc(value)}">${esc(title)}</button>`).join("")}</div>`;
     const categoryInput = (item, i) => `<label class="edit-label">標籤<input class="edit-input" name="places.${key}.${i}.category" list="tag-options-${key}" value="${esc(item.category)}" placeholder="選擇或輸入標籤" /></label>`;
     const tagList = `<datalist id="tag-options-${key}">${state.tagOptions[key].map(tag => `<option value="${esc(tag)}"></option>`).join("")}</datalist>`;
-    return `<div class="editor-place-toolbar">${placeFilters}<button type="button" class="edit-button secondary" data-add-place="${key}">＋ 新增${labels[key]}</button></div><p class="editor-place-help">可依標籤篩選後編輯${labels[key]}，也可新增標籤、描述與連結。</p>${tagTools}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card" data-place-category="${esc(item.category || "未分類")}"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
+    const tagManager = `<details class="editor-tag-manager"><summary>標籤管理 · ${state.tagOptions[key].length} 個</summary><div class="editor-tag-list">${state.tagOptions[key].map((tag, i) => `<div class="editor-tag-entry"><span>${esc(tag)}</span><div><button type="button" class="edit-button tiny secondary" data-edit-tag="${i}">編輯</button><button type="button" class="edit-button tiny danger" data-delete-tag="${i}">刪除</button></div></div>`).join("") || '<span class="text-sm text-slate-500">尚無標籤</span>'}</div></details>`;
+    return `<div class="editor-place-toolbar">${placeFilters}<div class="editor-place-actions"><button type="button" class="edit-button secondary" data-add-tag="${key}">＋標籤</button><button type="button" class="edit-button editor-place-add" data-add-place="${key}" aria-label="新增${labels[key]}" title="新增${labels[key]}">+</button></div></div><p class="editor-place-help">選擇標籤篩選項目；可在「標籤管理」編輯或刪除標籤。</p>${tagManager}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card" data-place-category="${esc(item.category || "未分類")}"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
   }
 
   function addTagDialog(key) {
@@ -781,6 +781,27 @@
     document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); const removedIndex = Number(button.dataset.deleteDay); state.days.splice(removedIndex,1); for (let i = removedIndex; i < state.days.length; i++) if (calendarDateValue(state.days[i].date)) state.days[i].date = shiftStoredDate(state.days[i].date, -1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
     document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
     document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
+    document.querySelectorAll("[data-edit-tag]").forEach(button => button.addEventListener("click", () => {
+      readForm();
+      const key = activeTab, index = Number(button.dataset.editTag), oldTag = state.tagOptions[key]?.[index];
+      if (oldTag === undefined) return;
+      const updated = window.prompt("編輯標籤名稱", oldTag)?.trim();
+      if (!updated || updated === oldTag) return;
+      if (state.tagOptions[key].some((tag, i) => i !== index && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) return window.alert("這個標籤已存在。");
+      state.tagOptions[key][index] = updated;
+      state.places[key].forEach(item => { if (item.category === oldTag) item.category = updated; });
+      if (placeEditFilters[key] === oldTag) placeEditFilters[key] = updated;
+      editorHasUnsavedChanges = true; editDialog();
+    }));
+    document.querySelectorAll("[data-delete-tag]").forEach(button => button.addEventListener("click", () => {
+      readForm();
+      const key = activeTab, index = Number(button.dataset.deleteTag), tag = state.tagOptions[key]?.[index];
+      if (tag === undefined || !window.confirm(`確定刪除「${tag}」標籤嗎？使用此標籤的項目會改為未分類。`)) return;
+      state.tagOptions[key].splice(index, 1);
+      state.places[key].forEach(item => { if (item.category === tag) item.category = ""; });
+      if (placeEditFilters[key] === tag) placeEditFilters[key] = "all";
+      editorHasUnsavedChanges = true; editDialog();
+    }));
     document.querySelectorAll("[data-delete-place]").forEach(button => button.addEventListener("click", () => { readForm(); const [key,i] = button.dataset.deletePlace.split("."); state.places[key].splice(Number(i),1); editDialog(); }));
     document.getElementById("trip-form").addEventListener("submit", async event => {
       event.preventDefault(); readForm();
@@ -1023,6 +1044,8 @@
       @media(max-width:640px){.editor-day-add{width:42px;height:42px;flex-basis:42px}.editor-place-toolbar{align-items:flex-start;flex-direction:column}.editor-place-toolbar>.edit-button{align-self:flex-end}.editor-place-filter-row{width:100%;flex-wrap:nowrap;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto}}
       .editor-day-sticky{position:sticky;top:132px;z-index:13;background:#f4f8f7;padding-bottom:9px}.editor-day-picker{position:static;top:auto;margin:-6px -2px 8px;padding:9px 2px;background:#f4f8f7}.editor-day-fixed-actions{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px 12px;background:#fff;border:1px solid #dceceb;border-radius:15px;box-shadow:0 4px 12px rgba(28,71,73,.04)}.editor-day-fixed-actions>strong{font-size:14px;color:#173b40}.editor-day-fixed-buttons{display:flex;gap:7px;flex:0 0 auto}.editor-day-fixed-buttons .edit-button{min-height:42px;padding:8px 11px}.editor-day-choice[draggable="true"],.editor-itinerary-row[draggable="true"]{cursor:grab}.itinerary-drag-handle,.editor-day-drag-grip{color:#819198;cursor:grab;user-select:none;touch-action:none}.itinerary-drag-handle{display:flex;align-items:center;justify-content:center;font-size:19px}.editor-day-drag-grip{font-style:normal;font-size:15px}.itinerary-sort-hint{color:#819198;font-size:11px;font-weight:500}.editor-day-choice.is-dragging,.editor-itinerary-row.is-dragging{opacity:.4}.editor-itinerary-row{grid-template-columns:24px minmax(160px,.8fr) minmax(170px,1.1fr) minmax(180px,1.3fr) auto}
       @media(max-width:640px){.editor-day-sticky{top:124px}.editor-day-fixed-actions{padding:9px;gap:6px}.editor-day-fixed-actions>strong{font-size:12px}.editor-day-fixed-buttons{gap:5px}.editor-day-fixed-buttons .edit-button{min-height:40px;padding:7px 8px;font-size:12px}.editor-day-choice{min-width:74px}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel,.editor-itinerary-row>.edit-label,.editor-itinerary-row>button{grid-column:2/-1;max-width:none}.editor-itinerary-row .edit-label:nth-of-type(2){grid-column:2/-1}.editor-itinerary-row>button{justify-self:start}}
+      .editor-place-toolbar{position:sticky;top:132px;z-index:13;display:flex;align-items:center;gap:8px;margin:0 -2px 9px;padding:8px 2px;background:#f4f8f7}.editor-place-filter-row{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}.editor-place-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}.editor-place-actions>.edit-button{margin:0}.editor-place-add{width:44px;height:44px;padding:0!important;border-radius:50%!important;font-size:25px!important;line-height:1}.editor-place-help{margin:0 2px 10px;color:#7b9092;font-size:12px}.editor-tag-manager{margin:0 0 12px;padding:0 12px;background:#fff;border:1px solid #dceceb;border-radius:14px;color:#526c6e}.editor-tag-manager>summary{padding:12px 0;font-size:13px;font-weight:750;cursor:pointer}.editor-tag-list{display:grid;gap:7px;padding:0 0 12px}.editor-tag-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e6efee;border-radius:10px;background:#f8fbfa;font-size:13px;font-weight:650}.editor-tag-entry>div{display:flex;gap:6px}.editor-tag-entry .edit-button{min-height:36px}
+      @media(max-width:640px){.editor-place-toolbar{top:124px;gap:6px;align-items:center;flex-direction:row}.editor-place-filter-row{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.editor-place-filter-row::-webkit-scrollbar{display:none}.editor-place-filter{flex:0 0 auto;padding:8px 12px;font-size:13px}.editor-place-actions{gap:5px}.editor-place-actions>[data-add-tag]{min-height:42px;padding:8px 10px}.editor-place-add{width:42px;height:42px;flex-basis:42px}}
     `; document.head.append(style);
   }
 
@@ -1075,4 +1098,5 @@
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
+
 
