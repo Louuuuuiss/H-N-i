@@ -223,7 +223,7 @@
         tag.classList.add("bg-blue-100", "text-blue-800");
         tag.append(document.createTextNode("景點"), externalIcon);
       } else if (sectionId === "sec-entertainment") {
-        const displayCategory = ({ spa: "SPA", barber: "Barbershop", bar: "Bar／Club" })[category.toLocaleLowerCase()] || category;
+        const displayCategory = ({ spa: "SPA", barber: "Barber", bar: "Bar" })[category.toLocaleLowerCase()] || category;
         tag.classList.add("bg-purple-100", "text-purple-800");
         tag.append(document.createTextNode(displayCategory), externalIcon);
       } else {
