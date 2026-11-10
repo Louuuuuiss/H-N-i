@@ -126,6 +126,15 @@
     return "其他";
   }
 
+  function resolveTripDate(value) {
+    const source = String(value || "");
+    const iso = source.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return iso[1] + "-" + iso[2].padStart(2, "0") + "-" + iso[3].padStart(2, "0");
+    const md = source.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    if (!md) return "";
+    const year = Number(String(state?.dateRange || "").match(/20\d{2}/)?.[0] || new Date().getFullYear());
+    return year + "-" + md[1].padStart(2, "0") + "-" + md[2].padStart(2, "0");
+  }
   function weatherIcon(code, isDay) {
     if (code === 0) return isDay ? "☀️" : "🌙";
     if ([1, 2].includes(code)) return isDay ? "🌤️" : "☁️";
@@ -147,6 +156,21 @@
     if ([95, 96, 99].includes(code)) return "雷雨";
     return "目前天氣";
   }
+  function renderDayWeather(location, data) {
+    if (String(state?.weatherLocation || "").trim() !== location) return;
+    const daily = data.daily || {};
+    document.querySelectorAll("#trip-day-picker .trip-day-choice").forEach(button => {
+      const output = button.querySelector(".trip-day-weather");
+      if (!output) return;
+      const index = (daily.time || []).indexOf(button.dataset.weatherDate || "");
+      const high = daily.temperature_2m_max?.[index];
+      const low = daily.temperature_2m_min?.[index];
+      const code = Number(daily.weather_code?.[index]);
+      if (index < 0 || high == null || low == null) { output.textContent = "—°"; return; }
+      output.textContent = weatherIcon(code, 1) + " " + Math.round(Number(high)) + "°/" + Math.round(Number(low)) + "°";
+      output.title = weatherDescription(code) + " · 最高 " + Math.round(Number(high)) + "°C，最低 " + Math.round(Number(low)) + "°C";
+    });
+  }
   async function fetchTripWeather(location) {
     const geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(location) + "&count=1&language=zh&format=json";
     const geoResponse = await fetch(geoUrl);
@@ -156,12 +180,12 @@
     if (!place) throw new Error("找不到這個地區");
     const query = new URLSearchParams({
       latitude: String(place.latitude), longitude: String(place.longitude),
-      current: "temperature_2m,weather_code,is_day", timezone: "auto", forecast_days: "1"
+      current: "temperature_2m,weather_code,is_day", daily: "weather_code,temperature_2m_max,temperature_2m_min", timezone: "auto", forecast_days: "16"
     });
     const weatherResponse = await fetch("https://api.open-meteo.com/v1/forecast?" + query);
     if (!weatherResponse.ok) throw new Error("天氣資料暫時無法讀取");
     const weather = await weatherResponse.json();
-    return { place: place.name, country: place.country, current: weather.current };
+    return { place: place.name, country: place.country, current: weather.current, daily: weather.daily };
   }
   function refreshWeatherBadge() {
     const badge = document.querySelector("header span.bg-red-800");
@@ -179,6 +203,7 @@
       const code = Number(current.weather_code);
       badge.textContent = weatherIcon(code, Number(current.is_day)) + "　" + temp + " · " + weatherDescription(code);
       badge.title = location + " · " + [data.place, data.country].filter(Boolean).join(", ") + " · Open-Meteo";
+      renderDayWeather(location, data);
     };
     if (weatherCache.location === location && weatherCache.data && Date.now() - weatherCache.loadedAt < 30 * 60 * 1000) {
       show(weatherCache.data); return;
@@ -278,10 +303,12 @@
         button.type = "button";
         button.setAttribute("aria-label", "前往第 " + (index + 1) + " 天：" + (day.date || "日期待填"));
         button.setAttribute("aria-pressed", String(index === activeDayIndex));
-        button.append(el("span", "trip-day-number", weekday), el("strong", "trip-day-date", dateNumber), el("span", "trip-day-label", "DAY " + (index + 1)));
+        button.dataset.weatherDate = resolveTripDate(day.date);
+        button.append(el("span", "trip-day-number", weekday), el("strong", "trip-day-date", dateNumber), el("span", "trip-day-weather", "—°"), el("span", "trip-day-label", "DAY " + (index + 1)));
         button.addEventListener("click", () => { activeDayIndex = index; activeDayFilter = "全部行程"; renderPage(); });
         dayPicker.append(button);
       });
+      if (weatherCache.location === String(state.weatherLocation || "").trim() && weatherCache.data) renderDayWeather(weatherCache.location, weatherCache.data);
 
       const selectedDay = state.days[activeDayIndex];
       const items = selectedDay?.items || [];
@@ -510,7 +537,10 @@
     return `<div class="editor-heading"><div><span class="editor-eyebrow">TRIP SETTINGS</span><h2>編輯旅程</h2><p>行程、航班與地點資料會同步儲存。</p></div><button type="button" class="edit-button secondary" data-close>完成</button></div>${tabs}<form id="trip-form" class="editor-form">${tabContents()}<div class="editor-savebar"><button type="button" id="logout-button" class="edit-button secondary">登出</button><span id="save-message" class="editor-save-message"></span><button type="submit" class="edit-button">儲存變更</button></div></form>`;
   }
 
-  function input(label, name, value, type = "text", placeholder = "") { return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`; }
+  function input(label, name, value, type = "text", placeholder = "") {
+    const step = type === "number" ? ' step="any"' : "";
+    return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}"${step} value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`;
+  }
   function calendarDateValue(value) {
     const m = String(value || '').match(/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})/);
     const md = String(value || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
@@ -824,6 +854,10 @@
       .weather-credit{display:inline-flex;margin-top:4px;color:#819198;font-size:9px;line-height:1.3;text-decoration:none}
       .weather-credit:hover{text-decoration:underline;color:#198e8b}
       header span.bg-red-800{max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .trip-day-choice{min-height:104px}
+      .trip-day-choice .trip-day-weather{font-size:9px;font-weight:800;color:#347b79;white-space:nowrap;line-height:1.15}
+      .trip-day-choice.active .trip-day-weather{color:#fff}
+      .trip-day-choice .trip-day-label{margin-top:1px}
     `; document.head.append(style);
   }
 
