@@ -4,7 +4,6 @@
   const FAVORITES_KEY = "hanoi-trip-favorites-v1";
   let favoriteSyncPending = 0;
   let favorites;
-  let favorites;
   try { favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")); }
   catch { favorites = new Set(); }
   const filters = new Map();
@@ -189,9 +188,31 @@
       favorite.classList.toggle("is-favorite", favorites.has(id));
 
       const detail = el("div", "flex-1 min-w-0 pr-2"); detail.append(el("h3", "font-bold text-sm text-slate-800", item.name), el("p", "text-xs text-slate-500 mt-0.5", item.description));
-      const link = el("a", "text-[11px] px-2 py-1 rounded-md shrink-0 bg-blue-100 text-blue-800 inline-flex items-center gap-1 hover:brightness-95 transition", item.category || badge);
-      link.href = safeUrl(item.url) || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(item.name); link.target = "_blank"; link.rel = "noopener noreferrer";
-      card.append(favorite, detail, link);
+      const tag = el("a", "place-tag text-[11px] px-2 py-1 rounded-md shrink-0 inline-flex items-center gap-1 hover:brightness-95 transition");
+      tag.href = safeUrl(item.url) || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(item.name);
+      tag.target = "_blank"; tag.rel = "noopener noreferrer";
+      const externalIcon = el("i", "fa-solid fa-arrow-up-right-from-square");
+      externalIcon.setAttribute("aria-hidden", "true");
+      if (sectionId === "sec-attractions") {
+        tag.classList.add("bg-blue-100", "text-blue-800");
+        tag.append(document.createTextNode("景點"), externalIcon);
+      } else if (sectionId === "sec-entertainment") {
+        const displayCategory = ({ spa: "SPA", barber: "Barbershop", bar: "Bar／Club" })[category.toLocaleLowerCase()] || category;
+        tag.classList.add("bg-purple-100", "text-purple-800");
+        tag.append(document.createTextNode(displayCategory), externalIcon);
+      } else {
+        const foodTags = {
+          "米其林一星": ["⭐ 一星", "bg-amber-100", "text-amber-800"],
+          "必比登": ["🍲 必比登", "bg-rose-100", "text-rose-700"],
+          "米其林入選": ["米其林入選", "bg-slate-100", "text-slate-700"]
+        };
+        const [displayCategory, background, foreground] = foodTags[category] || [category || badge, "bg-slate-100", "text-slate-700"];
+        tag.classList.add(background, foreground);
+        tag.append(document.createTextNode(displayCategory), externalIcon);
+      }
+      tag.setAttribute("aria-label", `${category || badge}：在地圖查看 ${item.name}`);
+      tag.title = "在 Google Maps 開啟";
+      card.append(favorite, detail, tag);
       wrapper.append(card);
       list.append(wrapper);
     }
