@@ -323,7 +323,7 @@
   function calendarDateText(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
     const d = new Date(value + 'T12:00:00');
-    return (d.getMonth()+1) + '/' + d.getDate() + ' (週' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
+    return (d.getMonth()+1) + '/' + d.getDate() + ' (' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
   }
   function readTimePair(value) {
     const p = String(value || '').split(/[-–~～至]/).map(x => x.trim());
