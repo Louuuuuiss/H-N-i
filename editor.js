@@ -2,14 +2,8 @@
   const API = window.TRIP_API_URL || "";
   const TOKEN_KEY = "hanoi-trip-editor-token";
   const FAVORITES_KEY = "hanoi-trip-favorites-v1";
-  const FAVORITE_CLIENT_KEY = "hanoi-trip-favorites-client-v1";
-  const favoriteShareToken = new URLSearchParams(location.search).get("favorites") || "";
-  let readOnlyFavoriteShare = Boolean(favoriteShareToken);
-  let favoriteClientId = localStorage.getItem(FAVORITE_CLIENT_KEY);
-  if (!favoriteClientId || !/^[a-f0-9-]{36}$/i.test(favoriteClientId)) {
-    favoriteClientId = crypto.randomUUID();
-    localStorage.setItem(FAVORITE_CLIENT_KEY, favoriteClientId);
-  }
+  let favoriteSyncPending = 0;
+  let favorites;
   let favorites;
   try { favorites = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")); }
   catch { favorites = new Set(); }
@@ -174,15 +168,16 @@
       const card = el("div", "bg-white p-3 rounded-xl shadow-sm border border-slate-100 flex gap-2 items-center");
       const favorite = el("button", "favorite-toggle", favorites.has(id) ? "♥" : "♡");
       favorite.type = "button";
-      favorite.disabled = readOnlyFavoriteShare;
-      favorite.setAttribute("aria-label", readOnlyFavoriteShare ? "分享檢視中的最愛" : favorites.has(id) ? "從我的最愛移除" : "加入我的最愛");
+      favorite.setAttribute("aria-label", favorites.has(id) ? "從我的最愛移除" : "加入我的最愛");
       favorite.setAttribute("aria-pressed", String(favorites.has(id)));
       favorite.title = favorites.has(id) ? "從我的最愛移除" : "加入我的最愛";
       favorite.addEventListener("click", () => {
-        if (readOnlyFavoriteShare) return;
         if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
         saveFavorites();
-        api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId: id, favorite: favorites.has(id) }) }).catch(error => console.warn("雲端收藏同步失敗：", error.message));
+        favoriteSyncPending++;
+        api("/api/favorites", { method: "POST", body: JSON.stringify({ placeId: id, favorite: favorites.has(id) }) })
+          .catch(error => console.warn("共用最愛同步失敗：", error.message))
+          .finally(() => { favoriteSyncPending = Math.max(0, favoriteSyncPending - 1); });
         const active = favorites.has(id);
         favorite.textContent = active ? "♥" : "♡";
         favorite.classList.toggle("is-favorite", active);
@@ -232,20 +227,6 @@
     makeButton("♡ 我的最愛", "favorites");
     categories.forEach(category => makeButton(category, category));
     applyPlaceFilter(section, activeFilter, datasetKey);
-  }
-
-  function shareFavoritesDialog() {
-    api("/api/favorites/share", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, favorites: [...favorites] }) })
-      .then(result => {
-        const shareUrl = new URL(location.pathname, location.origin);
-        shareUrl.searchParams.set("favorites", result.token);
-        showDialog(`<h2 class="text-xl font-bold mb-2">分享我的最愛</h2><p class="text-sm text-slate-500 mb-3">這是唯讀分享連結，有效 30 天。任何取得連結的人都能查看這份收藏清單。</p><label class="edit-label">分享連結<input id="favorite-share-url" class="edit-input" readonly value="${esc(shareUrl.href)}" /></label><p id="share-message" class="text-sm text-slate-500 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>關閉</button><button type="button" id="copy-share-url" class="edit-button">複製連結</button></div>`);
-        document.getElementById("copy-share-url").addEventListener("click", async () => {
-          try { await navigator.clipboard.writeText(shareUrl.href); document.getElementById("share-message").textContent = "已複製分享連結。"; }
-          catch { const input = document.getElementById("favorite-share-url"); input.focus(); input.select(); document.getElementById("share-message").textContent = "請複製上方連結分享。"; }
-        });
-      })
-      .catch(error => showDialog(`<h2 class="text-xl font-bold mb-2">無法建立分享連結</h2><p class="text-sm text-red-600">${esc(error.message)}</p><div class="flex justify-end mt-5"><button type="button" class="edit-button secondary" data-close>關閉</button></div>`));
   }
 
   function loginDialog() {
@@ -317,46 +298,41 @@
     `; document.head.append(style);
   }
 
+  async function syncSharedFavorites(mergeLocal = false) {
+    if (favoriteSyncPending) return;
+    try {
+      const remote = await api("/api/favorites");
+      const serverFavorites = new Set(Array.isArray(remote.favorites) ? remote.favorites : []);
+      if (mergeLocal) {
+        const uploads = [...favorites].filter(id => !serverFavorites.has(id));
+        for (const id of uploads) serverFavorites.add(id);
+        saveFavorites();
+        await Promise.allSettled(uploads.map(placeId => api("/api/favorites", { method: "POST", body: JSON.stringify({ placeId, favorite: true }) })));
+      }
+      const changed = serverFavorites.size !== favorites.size || [...serverFavorites].some(id => !favorites.has(id));
+      favorites = serverFavorites;
+      saveFavorites();
+      if (changed || mergeLocal) renderPage();
+    } catch (error) { console.warn("共用最愛尚未同步：", error.message); }
+  }
+
   async function init() {
     addStyles();
     const header = document.querySelector("header > div");
-    if (header && !favoriteShareToken) {
+    if (header) {
       const actions = el("div", "flex items-center gap-2");
-      const share = el("button", "trip-editor-share", "分享最愛");
-      share.type = "button"; share.addEventListener("click", shareFavoritesDialog);
       const login = el("button", "trip-editor-login", "登入編輯");
       login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
-      actions.append(share, login); header.append(actions);
+      actions.append(login); header.append(actions);
     }
     state = captureInitial();
     try { const result = await api("/api/content", { headers: token ? { Authorization: `Bearer ${token}` } : {} }); if (result.content) { state = result.content; renderPage(); } }
     catch (error) { console.warn("旅程資料尚未從 Cloudflare 載入：", error.message); }
-    if (token && !favoriteShareToken) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
-    if (favoriteShareToken) {
-      try {
-        const shared = await api("/api/favorites/share?token=" + encodeURIComponent(favoriteShareToken));
-        favorites = new Set(Array.isArray(shared.favorites) ? shared.favorites : []);
-        readOnlyFavoriteShare = true;
-        ["sec-attractions", "sec-entertainment", "sec-food"].forEach(id => filters.set(id, "favorites"));
-        const banner = el("div", "shared-favorites-banner", "正在查看分享的我的最愛（唯讀）");
-        document.querySelector("main")?.prepend(banner);
-        renderPage();
-      } catch (error) {
-        const banner = el("div", "shared-favorites-banner error", error.message || "分享連結無效或已逾期。");
-        document.querySelector("main")?.prepend(banner);
-      }
-    } else {
-      try {
-        const remote = await api("/api/favorites?clientId=" + encodeURIComponent(favoriteClientId));
-        const serverFavorites = Array.isArray(remote.favorites) ? remote.favorites : [];
-        for (const id of serverFavorites) favorites.add(id);
-        saveFavorites();
-        const uploads = [...favorites].map(placeId => api("/api/favorites", { method: "POST", body: JSON.stringify({ clientId: favoriteClientId, placeId, favorite: true }) }));
-        await Promise.allSettled(uploads);
-        renderPage();
-      } catch (error) { console.warn("雲端收藏尚未同步：", error.message); }
-    }
+    if (token) { try { await api("/api/content"); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); } }
+    await syncSharedFavorites(true);
+    window.setInterval(() => {
+      if (document.visibilityState === "visible") syncSharedFavorites(false);
+    }, 15000);
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
-
