@@ -124,6 +124,40 @@
     return "其他";
   }
 
+  function renderFlightSummary() {
+    if (!state) return;
+    const header = document.querySelector("header");
+    const headerRow = header?.querySelector(":scope > div");
+    state.flights ||= [];
+    let box = document.getElementById("trip-flight-summary");
+    if (!state.flights.length) { box?.remove(); return; }
+    if (!box) { box = el("div", "flight-summary"); box.id = "trip-flight-summary"; }
+    box.replaceChildren();
+    const toggle = el("button", "flight-summary-toggle");
+    toggle.type = "button";
+    toggle.setAttribute("aria-expanded", "false");
+    const lines = state.flights.map(f => (f.flightNumber || "航班待填") + " · " + (f.departureTime || "--:--") + "→" + (f.arrivalTime || "--:--") + " " + (f.direction || ""));
+    const airlines = [...new Set(state.flights.map(f => f.airline).filter(Boolean))];
+    const copy = el("span", "flight-summary-copy");
+    copy.append(el("strong", "", lines.join("　/　")), el("small", "", (airlines.join("、") || "航班資訊") + " · 點擊展開航班資訊"));
+    toggle.append(el("span", "flight-summary-icon", "✈️"), copy, el("span", "flight-summary-chevron", "▾"));
+    const details = el("div", "flight-summary-details");
+    state.flights.forEach(f => {
+      const row = el("div", "flight-detail-line");
+      row.append(el("strong", "", (f.direction || "航班") + " · " + (f.flightNumber || "航班待填")));
+      row.append(el("span", "", (f.departureAirport || "出發地待填") + " → " + (f.arrivalAirport || "抵達地待填")));
+      row.append(el("small", "", (f.date || "") + ((f.departureTime || f.arrivalTime) ? "　" + (f.departureTime || "--:--") + " → " + (f.arrivalTime || "--:--") : "")));
+      if (f.note) row.append(el("small", "", f.note));
+      details.append(row);
+    });
+    toggle.addEventListener("click", () => {
+      const expanded = box.classList.toggle("expanded");
+      toggle.setAttribute("aria-expanded", String(expanded));
+    });
+    box.append(toggle, details);
+    if (header && headerRow && box.parentElement !== header) headerRow.insertAdjacentElement("afterend", box);
+  }
+
   function renderPage() {
     if (!state) return;
     const savedPageScroll = window.scrollY;
@@ -140,6 +174,7 @@
         : state.dateRange;
     }
     const duration = document.querySelector("header span.bg-red-800"); if (duration) duration.textContent = "☀️　旅程準備就緒";
+    renderFlightSummary();
     const itinerary = document.getElementById("sec-itinerary");
     if (itinerary) {
       if (state.days.length) activeDayIndex = Math.min(activeDayIndex, state.days.length - 1);
@@ -149,41 +184,8 @@
         dayPicker.id = "trip-day-picker";
         const header = document.querySelector("header");
         const headerRow = header?.querySelector(":scope > div");
-        let flightSummary = document.getElementById("trip-flight-summary");
-        state.flights ||= [];
-        if (state.flights.length) {
-          if (!flightSummary) {
-            flightSummary = el("div", "flight-summary");
-            flightSummary.id = "trip-flight-summary";
-            if (header && headerRow) headerRow.insertAdjacentElement("afterend", flightSummary);
-          }
-          flightSummary.replaceChildren();
-          const toggle = el("button", "flight-summary-toggle");
-          toggle.type = "button";
-          toggle.setAttribute("aria-expanded", "false");
-          const flightLines = state.flights.map(flight => (flight.flightNumber || "航班待填") + " · " + (flight.departureTime || "--:--") + "→" + (flight.arrivalTime || "--:--") + " " + (flight.direction || ""));
-          const airlines = [...new Set(state.flights.map(flight => flight.airline).filter(Boolean))];
-          const copy = el("span", "flight-summary-copy");
-          copy.append(el("strong", "", flightLines.join("　/　")), el("small", "", (airlines.join("、") || "航班資訊") + " · 點擊展開航班資訊"));
-          toggle.append(el("span", "flight-summary-icon", "✈️"), copy, el("span", "flight-summary-chevron", "▾"));
-          const details = el("div", "flight-summary-details");
-          state.flights.forEach(flight => {
-            const line = el("div", "flight-detail-line");
-            line.append(el("strong", "", (flight.direction || "航班") + " · " + (flight.flightNumber || "航班待填")));
-            line.append(el("span", "", (flight.departureAirport || "出發地待填") + " → " + (flight.arrivalAirport || "抵達地待填")));
-            line.append(el("small", "", (flight.date || "") + ((flight.departureTime || flight.arrivalTime) ? "　" + (flight.departureTime || "--:--") + " → " + (flight.arrivalTime || "--:--") : "")));
-            if (flight.note) line.append(el("small", "", flight.note));
-            details.append(line);
-          });
-          toggle.addEventListener("click", () => {
-            const expanded = flightSummary.classList.toggle("expanded");
-            toggle.setAttribute("aria-expanded", String(expanded));
-          });
-          flightSummary.append(toggle, details);
-        } else {
-          flightSummary?.remove();
-          flightSummary = null;
-        }
+        renderFlightSummary();
+        const flightSummary = document.getElementById("trip-flight-summary");
         if (header && headerRow) (flightSummary || headerRow).insertAdjacentElement("afterend", dayPicker);
         else itinerary.prepend(dayPicker);
       }
@@ -505,6 +507,8 @@
     document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
     document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
     document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
+    document.querySelector("[data-add-flight]")?.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); });
+    document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
     document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); state.days.push({ date: "", destination: "", items: [] }); editDialog(); });
     document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); state.days[Number(button.dataset.addItem)].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
@@ -672,6 +676,15 @@
       .editor-flight-card .flight-fields{padding:12px}
       .editor-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
       .editor-empty{padding:22px;text-align:center;color:#819198;background:#fff;border:1px dashed #b8d8d6;border-radius:16px}
+      .flight-summary{padding:0 16px 12px;background:linear-gradient(145deg,#fff 30%,#eaf8f6)}
+      .flight-summary-toggle{width:100%;display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid #dceceb;border-radius:15px;background:#fff;color:#173b40;text-align:left;box-shadow:0 4px 14px rgba(37,83,84,.06)}
+      .flight-summary-icon{flex:0 0 auto;font-size:19px}.flight-summary-copy{display:grid;gap:3px;min-width:0;flex:1}
+      .flight-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.flight-summary-copy small{color:#819198;font-size:10px}
+      .flight-summary-chevron{color:#198e8b;transition:transform .15s}.flight-summary.expanded .flight-summary-chevron{transform:rotate(180deg)}
+      .flight-summary-details{display:none;padding:5px 10px 0}.flight-summary.expanded .flight-summary-details{display:block}
+      .flight-detail-line{display:grid;gap:3px;padding:9px 4px;border-top:1px solid #e5efed;font-size:11px;color:#526c6e}.flight-detail-line small{color:#819198}
+      .editor-flight-card .flight-fields{padding:12px}.editor-card-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+      .editor-empty{padding:24px 16px;text-align:center;border:1px dashed #b8d8d6;border-radius:16px;color:#7b9092;background:#fff;font-size:13px}
     `; document.head.append(style);
   }
 
