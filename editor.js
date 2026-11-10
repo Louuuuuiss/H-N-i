@@ -217,7 +217,6 @@
           const icons = { "交通": "✈️", "景點": "📍", "娛樂": "♨️", "美食": "🍜", "住宿": "🛏️", "其他": "✨" };
           top.append(el("span", "trip-entry-kind", (icons[category] || "✨") + " " + category));
           detail.append(top, el("p", "trip-entry-description", item.description));
-          if (range.length > 1 && range[1]) detail.append(el("span", "trip-entry-range", range[0] + "–" + range[1]));
           row.append(detail);
           body.append(row);
         });
@@ -420,15 +419,10 @@
     const d = new Date(value + 'T12:00:00');
     return (d.getMonth()+1) + '/' + d.getDate() + ' (' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
   }
-  function readTimePair(value) {
-    const p = String(value || '').split(/[-–~～至]/).map(x => x.trim());
-    if (p.length !== 2) return null;
-    const parse = part => {
-      const m = part.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-      return m ? [m[1].padStart(2,'0'), m[2], (m[3] || '00')] : null;
-    };
-    const start = parse(p[0]), end = parse(p[1]);
-    return start && end ? { start, end } : null;
+  function readSingleTime(value) {
+    const first = String(value || "").split(/[-–~～至]/)[0].trim();
+    const match = first.match(/^(\d{1,2}):(\d{2})/);
+    return match ? [match[1].padStart(2, "0"), match[2]] : ["09", "00"];
   }
   function timeUnitOptions(max, selected) {
     let options = '';
@@ -447,7 +441,7 @@
   }
   function tabContents() {
     if (activeTab === "trip") return `<div class="edit-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}</div>`;
-    if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${(() => { const range = readTimePair(item.time); return range ? `<div class="time-wheel-group">${timePointEditor(i, j, "start", range.start, "開始")}${timePointEditor(i, j, "end", range.end, "結束")}</div>` : input("時間", `days.${i}.items.${j}.time`, item.time, "text", "例如 09:00-10:00"); })()}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
+    if (activeTab === "days") return `<div class="flex justify-between items-center mb-3"><p class="text-sm text-slate-500">可新增或刪除天數與每一天的行程。</p><button type="button" class="edit-button secondary" data-add-day>＋ 新增天數</button></div>${state.days.map((day, i) => `<details class="edit-card" open><summary>第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目</strong><button type="button" class="edit-button tiny secondary" data-add-item="${i}">＋ 新增行程</button></div>${day.items.map((item, j) => `<div class="edit-row">${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}${input("行程", `days.${i}.items.${j}.title`, item.title)}${input("備註", `days.${i}.items.${j}.description`, item.description)}<button type="button" class="edit-button tiny danger" data-delete-item="${i}.${j}">刪除</button></div>`).join("")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-day="${i}">刪除第 ${i + 1} 天</button></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -497,7 +491,7 @@
     const form = document.getElementById("trip-form"); if (!form) return;
     const data = new FormData(form);
     for (const [path, value] of data) {
-      if (!path || path.endsWith(".calendarDate") || /\.(start|end)(Hour|Minute|Second)$/.test(path)) continue;
+      if (!path || path.endsWith(".calendarDate") || /\.time(Hour|Minute)$/.test(path)) continue;
       setPath(state, path, value);
     }
     for (let i = 0; i < state.days.length; i++) {
@@ -505,11 +499,8 @@
       if (date) state.days[i].date = calendarDateText(String(date));
       for (let j = 0; j < state.days[i].items.length; j++) {
         const path = "days." + i + ".items." + j;
-        const units = part => ["Hour", "Minute"].map(unit => data.get(path + "." + part + unit));
-        const start = units("start"), end = units("end");
-        if (start.every(value => value !== null) && end.every(value => value !== null)) {
-          state.days[i].items[j].time = start.join(":") + "-" + end.join(":");
-        }
+        const time = ["Hour", "Minute"].map(unit => data.get(path + ".time" + unit));
+        if (time.every(value => value !== null)) state.days[i].items[j].time = time.join(":");
       }
     }
   }
