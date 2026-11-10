@@ -731,7 +731,7 @@
       .trip-header-actions{margin-left:auto;flex:0 0 auto}
       body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{position:sticky;top:0;z-index:55;display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:12px 2px;background:#f4f8f7;box-shadow:0 5px 12px rgba(37,83,84,.04)}
       body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2 .trip-header-actions{margin-left:auto}
-      body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>.place-filters{position:sticky;top:48px;z-index:54;margin:0 0 10px;padding:9px 0 11px;background:#f4f8f7}
+      body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>.place-filters{position:sticky;top:52px;z-index:54;margin:0 0 10px;padding:9px 0 11px;background:#f4f8f7}
       body:not([data-active-tab="sec-itinerary"]) #sec-map>.bg-white{position:sticky;top:48px;z-index:54;margin:0 0 10px;padding:10px;background:#f4f8f7;border:0!important;border-radius:0!important;box-shadow:0 5px 12px rgba(37,83,84,.04)!important}
       body:not([data-active-tab="sec-itinerary"]) #sec-map #map-category-filter{gap:6px}
       .map-pin{touch-action:none;user-select:none;-webkit-user-select:none}
