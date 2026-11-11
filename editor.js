@@ -625,12 +625,27 @@
     if (state.days.length) {
       const actions = el("div", "editor-day-fixed-actions");
       actions.append(el("strong", "", `第 ${activeEditDayIndex + 1} 天 · ${state.days[activeEditDayIndex].date || "日期待填"}`));
+      const day = state.days[activeEditDayIndex];
+      const dateField = el("label", "edit-label editor-day-inline-field", "日期");
+      const dateInput = el("input", "edit-input");
+      dateInput.type = "date"; dateInput.name = `days.${activeEditDayIndex}.calendarDate`; dateInput.value = calendarDateValue(day.date);
+      dateInput.addEventListener("input", () => {
+        const date = calendarDateText(dateInput.value) || "日期待填";
+        actions.querySelector("strong").textContent = `第 ${activeEditDayIndex + 1} 天 · ${date}`;
+        const dayDate = dayList.querySelector(`[data-day-index="${activeEditDayIndex}"] strong`);
+        if (dayDate) dayDate.textContent = date;
+      });
+      dateField.append(dateInput);
+      const destinationField = el("label", "edit-label editor-day-inline-field", "當日目的地／摘要");
+      const destinationInput = el("input", "edit-input");
+      destinationInput.name = `days.${activeEditDayIndex}.destination`; destinationInput.value = day.destination || ""; destinationInput.placeholder = "目的地／摘要";
+      destinationField.append(destinationInput);
       const buttons = el("div", "editor-day-fixed-buttons");
       const addItem = el("button", "edit-button secondary", "＋ 新增行程");
       addItem.type = "button"; addItem.dataset.addItem = String(activeEditDayIndex);
       const deleteDay = el("button", "edit-button danger", "刪除本日");
       deleteDay.type = "button"; deleteDay.dataset.deleteDay = String(activeEditDayIndex);
-      buttons.append(addItem, deleteDay); actions.append(buttons); sticky.append(actions);
+      buttons.append(addItem, deleteDay); actions.append(dateField, destinationField, buttons); sticky.append(actions);
     }
     toolbar.insertAdjacentElement("afterend", sticky);
     if (!state.days.length) sticky.insertAdjacentElement("afterend", el("div", "editor-empty", "目前沒有行程日，請新增一天開始編輯。"));
@@ -709,7 +724,7 @@
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
       return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>使用 24 小時制設定航班時間，可選擇去程或回程。</p><div class="flight-add-actions"><button type="button" class="edit-button" data-add-flight="去程">＋ 新增去程</button><button type="button" class="edit-button secondary" data-add-flight="回程">＋ 新增回程</button></div></div>' + (cards || '<div class="editor-empty">尚未新增航班，請新增去程或回程航班。</div>');
     }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}<div class="itinerary-item-fields"><input class="edit-input itinerary-title-input" name="days.${i}.items.${j}.title" value="${esc(item.title)}" aria-label="行程" placeholder="行程項目" /><input class="edit-input itinerary-note-input" name="days.${i}.items.${j}.description" value="${esc(item.description || "")}" aria-label="備註" placeholder="備註（選填）" /></div><button type="button" class="edit-button itinerary-delete-icon" data-delete-item="${i}.${j}" aria-label="刪除此行程" title="刪除行程"><span aria-hidden="true">×</span></button></div>`).join("")}</div></details>`).join("")}`;
+        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}<div class="itinerary-item-fields"><input class="edit-input itinerary-title-input" name="days.${i}.items.${j}.title" value="${esc(item.title)}" aria-label="行程" placeholder="行程項目" /><input class="edit-input itinerary-note-input" name="days.${i}.items.${j}.description" value="${esc(item.description || "")}" aria-label="備註" placeholder="備註（選填）" /></div><button type="button" class="edit-button itinerary-delete-icon" data-delete-item="${i}.${j}" aria-label="刪除此行程" title="刪除行程"><span aria-hidden="true">×</span></button></div>`).join("")}</div></details>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
@@ -1117,6 +1132,11 @@
       @media(max-width:640px){.editor-heading{z-index:30!important}.edit-tabs{top:calc(var(--editor-heading-height,88px) - 16px);z-index:29!important}.editor-day-sticky,.editor-place-toolbar{top:calc(var(--editor-heading-height,88px) + var(--editor-tabs-height,58px) - 16px);z-index:28}}
       @media(max-width:640px){.editor-panel.wide{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}.editor-heading-actions{position:fixed;left:calc(8px + env(safe-area-inset-left,0px));right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:1100;display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:nowrap;box-sizing:border-box;max-width:none;width:auto;padding:8px;border:1px solid #dceceb;border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 5px 22px rgba(23,59,64,.16);backdrop-filter:blur(14px)}.editor-heading-actions .edit-button{flex:0 0 auto;min-height:40px;padding:7px 9px;font-size:11px}.editor-heading-actions .editor-save-message{order:-1;flex:1 1 auto;flex-basis:auto;min-width:0;max-width:none;text-align:left;font-size:10px;line-height:1.3}.editor-heading{padding-bottom:8px}}
       @media(max-width:640px){.editor-panel.wide{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}.editor-heading{align-items:flex-start;gap:8px}.editor-heading>div:first-child{flex:1 1 auto;min-width:0}.editor-heading-actions{position:static;inset:auto;left:auto;right:auto;bottom:auto;z-index:auto;flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:4px;flex-wrap:nowrap;box-sizing:border-box;width:auto;max-width:none;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}.editor-heading-actions .edit-button{flex:0 0 auto;min-height:38px;padding:6px 8px;font-size:11px}.editor-heading-actions .editor-save-message{display:none}.editor-heading{padding-bottom:12px}}
+      .editor-day-fixed-actions{display:grid;grid-template-columns:minmax(110px,.75fr) minmax(130px,1fr) minmax(150px,1.1fr) auto;align-items:center;gap:8px}
+      .editor-day-inline-field{display:grid;grid-template-columns:1fr;gap:3px;min-width:0;font-size:10px}
+      .editor-day-inline-field>.edit-input{width:100%;min-width:0;min-height:38px;padding:6px 8px;font-size:12px;box-sizing:border-box}
+      @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:minmax(60px,.55fr) minmax(0,1fr) minmax(0,1fr) auto;gap:4px;padding:7px 5px}.editor-day-fixed-actions>strong{font-size:11px;line-height:1.2}.editor-day-inline-field{gap:2px;font-size:8px}.editor-day-inline-field>.edit-input{min-height:34px;padding:4px;font-size:10px}.editor-day-fixed-buttons{gap:3px}.editor-day-fixed-buttons .edit-button{min-height:34px;padding:4px 5px;font-size:9px;white-space:nowrap}}
+      @media(max-width:360px){.editor-day-fixed-actions{grid-template-columns:52px minmax(0,1fr) minmax(0,1fr) auto;gap:2px;padding:6px 3px}.editor-day-fixed-actions>strong{font-size:10px}.editor-day-fixed-buttons .edit-button{padding:3px;font-size:8px}}
     `; document.head.append(style);
   }
 
