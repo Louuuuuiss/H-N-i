@@ -527,7 +527,26 @@
       if (returnToEditor) editDialog();
     }); document.body.append(overlay);
   }
-  function closeDialog() { document.getElementById("trip-editor-overlay")?.remove(); }
+  function closeDialog() {
+    const overlay = document.getElementById("trip-editor-overlay");
+    overlay?.querySelector(".editor-panel")?._stickyResizeObserver?.disconnect();
+    overlay?.remove();
+  }
+
+  function syncEditorStickyLayout(panel) {
+    const heading = panel.querySelector(".editor-heading"), tabs = panel.querySelector(".edit-tabs");
+    if (!heading || !tabs) return;
+    const update = () => {
+      panel.style.setProperty("--editor-heading-height", heading.offsetHeight + "px");
+      panel.style.setProperty("--editor-tabs-height", tabs.offsetHeight + "px");
+    };
+    update();
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(update);
+      observer.observe(heading); observer.observe(tabs);
+      panel._stickyResizeObserver = observer;
+    }
+  }
 
   function editDialog() {
     if (!token) return loginDialog();
@@ -536,6 +555,7 @@
     showDialog(editorMarkup(), true);
     const panel = document.querySelector(".editor-panel");
     if (panel) panel.scrollTop = scrollTop;
+    if (panel) syncEditorStickyLayout(panel);
     if (activeTab === "days" && panel) prepareDayEditor(panel);
     bindEditor();
   }
@@ -793,7 +813,7 @@
     document.querySelectorAll("[data-add-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: button.dataset.addFlight || "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
     document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); const previous = [...state.days].reverse().find(day => calendarDateValue(day.date)); state.days.push({ date: previous ? shiftStoredDate(previous.date, 1) : "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
-    document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
+    document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "" }); editDialog(); }));
     document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
     document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); const removedIndex = Number(button.dataset.deleteDay); state.days.splice(removedIndex,1); for (let i = removedIndex; i < state.days.length; i++) if (calendarDateValue(state.days[i].date)) state.days[i].date = shiftStoredDate(state.days[i].date, -1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
     document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
@@ -830,6 +850,7 @@
     for (let i = 0; i < state.days.length; i++) {
       const date = data.get("days." + i + ".calendarDate");
       if (date) state.days[i].date = calendarDateText(String(date));
+      for (const item of state.days[i].items || []) delete item.description;
     }
   }
 
@@ -1049,6 +1070,7 @@
       @media(max-width:640px){.editor-panel,.editor-panel.wide{width:100vw;max-width:100vw;min-width:0;box-sizing:border-box;overflow-x:hidden}.editor-form,.editor-day-card,.editor-day-card>.edit-grid,.editor-day-card>.mt-3,.editor-itinerary-row,.editor-itinerary-row>.edit-label,.editor-itinerary-row>.time-wheel-group,.time-point,.flight-fields,.flight-time-editor{min-width:0;max-width:100%;box-sizing:border-box}.editor-heading{flex-wrap:nowrap;align-items:center}.editor-heading>div:first-child{flex:1 1 auto;min-width:0}.editor-heading p{display:none}.editor-heading-actions{flex:0 1 auto;max-width:58%;width:auto;flex-wrap:wrap;gap:4px}.editor-heading-actions .edit-button{padding:7px 8px;font-size:11px}.editor-heading-actions .editor-save-message{flex-basis:100%;max-width:100%;font-size:10px}.edit-input{min-width:0;max-width:100%;box-sizing:border-box}.editor-itinerary-row{grid-template-columns:22px minmax(0,1fr);width:100%;gap:8px}.editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:2/-1;width:100%;max-width:none}.editor-itinerary-row>.edit-label,.editor-itinerary-row>[data-delete-item]{grid-column:2/-1}.editor-itinerary-row .itinerary-time-point{padding:0;border:0;background:transparent}.editor-itinerary-row .time-wheel{min-height:44px;font-size:16px}.editor-itinerary-row>[data-delete-item]{width:auto;justify-self:start}}
       .editor-itinerary-row{grid-template-columns:24px minmax(130px,.6fr) minmax(160px,1.4fr) auto}.editor-itinerary-row>.time-wheel-group.single-time-wheel{width:100%;max-width:170px}.itinerary-delete-icon{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;padding:0!important;border:1px solid #f0d6d9!important;border-radius:50%!important;background:#fff3f3!important;color:#bb6d75!important;font-size:22px;line-height:1;font-weight:500}.itinerary-delete-icon span{display:block;transform:translateY(-1px)}
       @media(max-width:640px){.editor-day-card>.mt-3{margin:8px 6px;padding:8px}.editor-itinerary-row{grid-template-columns:20px minmax(92px,30vw) minmax(0,1fr) 32px;align-items:center;gap:5px;padding:9px 0}.editor-itinerary-row>.time-wheel-group.single-time-wheel{grid-column:auto;width:auto;max-width:none;justify-self:stretch}.editor-itinerary-row>.itinerary-title-field{grid-column:auto;width:100%;min-width:0}.editor-itinerary-row .itinerary-title-field .edit-input{min-height:42px;padding:7px 8px;font-size:14px}.editor-itinerary-row .itinerary-time-point{padding:0;border:0;background:transparent}.editor-itinerary-row .time-wheel{width:100%;min-height:42px;padding:6px 3px;font-size:15px}.editor-itinerary-row>.itinerary-delete-icon{grid-column:auto;justify-self:center;width:32px;min-width:32px;max-width:32px;height:32px;min-height:32px}.editor-itinerary-row>.itinerary-drag-handle{grid-column:auto;justify-self:center;font-size:17px}}
+      @media(max-width:640px){.editor-heading{z-index:30!important}.edit-tabs{top:calc(var(--editor-heading-height,88px) - 16px);z-index:29!important}.editor-day-sticky,.editor-place-toolbar{top:calc(var(--editor-heading-height,88px) + var(--editor-tabs-height,58px) - 16px);z-index:28}}
     `; document.head.append(style);
   }
 
