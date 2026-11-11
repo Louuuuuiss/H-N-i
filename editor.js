@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 26666)
+Total output lines: 1162
+
 (() => {
   const API = window.TRIP_API_URL || "";
   const TOKEN_KEY = "hanoi-trip-editor-token";
@@ -15,6 +18,7 @@
   let activeEditDayIndex = 0;
   let activeDayFilter = "全部行程";
   let editorHasUnsavedChanges = false;
+  let pendingHomeInstall = null;
   const placeEditFilters = { attractions: "all", entertainment: "all", food: "all" };
   let token = sessionStorage.getItem(TOKEN_KEY) || "";
   let weatherCache = { location: "", promise: null, data: null, loadedAt: 0 };
@@ -264,6 +268,8 @@
     if (!state) return;
     const savedPageScroll = window.scrollY;
     document.title = state.title || "旅行行程";
+    const installTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (installTitle) installTitle.content = state.title || "旅行行程";
+    const applicationTitle = document.querySelector('meta[name="application-name"]'); if (applicationTitle) applicationTitle.content = state.title || "旅行行程";
     const flag = document.querySelector("header .text-2xl"); if (flag && state.flag) flag.textContent = state.flag;
     const title = document.querySelector("header h1"); if (title) title.textContent = state.title;
     const date = document.querySelector("header p");
@@ -515,6 +521,31 @@
     });
   }
 
+  async function addToHomeScreen() {
+    const appName = state?.title || document.querySelector("header h1")?.textContent.trim() || "旅行行程";
+    const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (appleTitle) appleTitle.content = appName;
+    const applicationTitle = document.querySelector('meta[name="application-name"]');
+    if (applicationTitle) applicationTitle.content = appName;
+    const standalone = window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone;
+    if (standalone) {
+      showDialog(`<h2 class="text-xl font-bold mb-2">已在主畫面模式</h2><p class="text-sm text-slate-600">「${esc(appName)}」已以獨立視窗開啟。</p><div class="flex justify-end mt-5"><button type="button" class="edit-button" data-close>知道了</button></div>`);
+      return;
+    }
+    if (pendingHomeInstall) {
+      const promptEvent = pendingHomeInstall;
+      pendingHomeInstall = null;
+      await promptEvent.prompt();
+      await promptEvent.userChoice;
+      return;
+    }
+    const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const instructions = isAppleMobile
+      ? `在 Safari 點「分享」→「加入主畫面」，名稱會使用「${esc(appName)}」。開啟「以網頁 App 打開」後點「加入」。`
+      : `在瀏覽器選單選擇「安裝應用程式」或「加到主畫面」，確認名稱為「${esc(appName)}」後完成新增。`;
+    showDialog(`<span class="editor-section-kicker">HOME SCREEN</span><h2 class="text-xl font-bold mb-2">加入主畫面</h2><p class="text-sm text-slate-600">${instructions}</p><div class="flex justify-end mt-5"><button type="button" class="edit-button" data-close>知道了</button></div>`);
+  }
+
   function showDialog(content, wide = false) {
     closeDialog();
     const overlay = el("div", "editor-overlay"); overlay.id = "trip-editor-overlay";
@@ -614,256 +645,7 @@
 
   function input(label, name, value, type = "text", placeholder = "") {
     const step = type === "number" ? ' step="any"' : "";
-    return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${type}"${step} value="${esc(value)}" placeholder="${esc(placeholder)}" /></label>`;
-  }
-  function calendarDateValue(value) {
-    const m = String(value || '').match(/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})/);
-    const md = String(value || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
-    const year = (m && m[1]) || String(state?.dateRange || '').match(/20\d{2}/)?.[0] || new Date().getFullYear();
-    const month = m ? m[2] : md && md[1], day = m ? m[3] : md && md[2];
-    return month && day ? String(year) + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0') : '';
-  }
-  function calendarDateText(value) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
-    const d = new Date(value + 'T12:00:00');
-    return (d.getMonth()+1) + '/' + d.getDate() + ' (' + ['日','一','二','三','四','五','六'][d.getDay()] + ')';
-  }
-  function shiftStoredDate(value, amount) {
-    const iso = calendarDateValue(value);
-    if (!iso) return '';
-    const date = new Date(iso + 'T12:00:00');
-    date.setDate(date.getDate() + amount);
-    return calendarDateText([date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'));
-  }
-  function resequenceDayDates(anchor) {
-    const iso = calendarDateValue(anchor);
-    if (!iso) return;
-    const start = new Date(iso + 'T12:00:00');
-    state.days.forEach((day, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
-      day.date = calendarDateText([date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'));
-    });
-  }
-  function tripHeaderDateRange() {
-    const dates = state.days.map(day => calendarDateValue(day.date)).filter(Boolean);
-    if (!dates.length) return state.dateRange || '';
-    const label = value => { const [, month, day] = value.split('-'); return Number(month) + '/' + Number(day); };
-    return dates.length === 1 ? label(dates[0]) : label(dates[0]) + ' — ' + label(dates[dates.length - 1]);
-  }
-  function readSingleTime(value) {
-    const first = String(value || "").split(/[-–~～至]/)[0].trim();
-    const match = first.match(/^(\d{1,2}):(\d{2})/);
-    return match ? [match[1].padStart(2, "0"), match[2]] : ["09", "00"];
-  }
-  function timePointEditor(dayIndex, itemIndex, endpoint, values, label) {
-    const base = 'days.' + dayIndex + '.items.' + itemIndex + '.' + endpoint;
-    const value = Array.isArray(values) ? values.join(":") : readSingleTime(values).join(":");
-    return '<div class="time-point itinerary-time-point"><input class="edit-input time-wheel" type="time" lang="en-GB" step="60" aria-label="' + esc(label) + '時間" name="' + base + '" value="' + esc(value) + '" /></div>';
-  }
-  function flightTimeEditor(label, name, value) {
-    const time = readSingleTime(value).join(":");
-    return '<label class="edit-label flight-time-editor">' + esc(label) + '（24 小時制）<input class="edit-input time-wheel" type="time" lang="en-GB" step="60" name="' + name + '" aria-label="' + esc(label) + '" value="' + esc(time) + '" /></label>';
-  }
-  function tabContents() {
-    if (activeTab === "trip") return `<div class="editor-section-intro"><span class="editor-section-kicker">TRIP SETTINGS</span><h3>旅程基本資料</h3><p>設定名稱、日期與天數，這些資訊會顯示在頁首。</p></div><div class="edit-grid trip-settings-grid">${input("國旗／圖示", "flag", state.flag, "text", "例如 🇯🇵")}${input("旅程標題", "title", state.title)}${input("日期範圍", "dateRange", state.dateRange)}${input("行程天數說明", "duration", state.duration)}${input("天氣地區", "weatherLocation", state.weatherLocation || "", "text", "例如 Hanoi, Vietnam")}</div>`;
-    if (activeTab === "flights") {
-      state.flights ||= [];
-      const cards = state.flights.map((flight, i) => '<section class="edit-card editor-flight-card"><div class="editor-card-heading"><strong>' + esc(flight.direction || "航班") + ' · ' + esc(flight.flightNumber || "新航班") + '</strong><button type="button" class="edit-button tiny danger" data-delete-flight="' + i + '">移除此航班</button></div><div class="edit-grid flight-fields">' +
-        input("航班日期", "flights." + i + ".date", flight.date, "date") +
-        '<label class="edit-label">航程<select class="edit-input" name="flights.' + i + '.direction"><option value="去程"' + (flight.direction === "去程" ? " selected" : "") + '>去程</option><option value="回程"' + (flight.direction === "回程" ? " selected" : "") + '>回程</option></select></label>' +
-        input("航空公司", "flights." + i + ".airline", flight.airline) +
-        input("航班編號", "flights." + i + ".flightNumber", flight.flightNumber, "text", "例如 CI-100") +
-        flightTimeEditor("出發時間", "flights." + i + ".departureTime", flight.departureTime) +
-        flightTimeEditor("抵達時間", "flights." + i + ".arrivalTime", flight.arrivalTime) +
-        input("出發地／機場", "flights." + i + ".departureAirport", flight.departureAirport) +
-        input("目的地／機場", "flights." + i + ".arrivalAirport", flight.arrivalAirport) +
-        input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
-      return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>使用 24 小時制設定航班時間，可選擇去程或回程。</p><div class="flight-add-actions"><button type="button" class="edit-button" data-add-flight="去程">＋ 新增去程</button><button type="button" class="edit-button secondary" data-add-flight="回程">＋ 新增回程</button></div></div>' + (cards || '<div class="editor-empty">尚未新增航班，請新增去程或回程航班。</div>');
-    }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期與單一時間。</p></div></div>${state.days.map((day, i) => `<details class="edit-card editor-day-card" ${i === activeEditDayIndex ? "open" : ""}><summary class="editor-card-summary">第 ${i + 1} 天 · ${esc(day.date || "日期待填")}</summary><div class="edit-grid mt-3">${`<label class="edit-label">日期<input class="edit-input" type="date" name="days.${i}.calendarDate" value="${calendarDateValue(day.date)}" /></label>`}${input("當日目的地／摘要", `days.${i}.destination`, day.destination)}</div><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}<div class="itinerary-item-fields"><input class="edit-input itinerary-title-input" name="days.${i}.items.${j}.title" value="${esc(item.title)}" aria-label="行程" placeholder="行程項目" /><input class="edit-input itinerary-note-input" name="days.${i}.items.${j}.description" value="${esc(item.description || "")}" aria-label="備註" placeholder="備註（選填）" /></div><button type="button" class="edit-button itinerary-delete-icon" data-delete-item="${i}.${j}" aria-label="刪除此行程" title="刪除行程"><span aria-hidden="true">×</span></button></div>`).join("")}</div></details>`).join("")}`;
-    const key = activeTab; const items = state.places[key];
-    state.tagOptions ||= {};
-    state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
-    const activePlaceFilter = placeEditFilters[key] || "all";
-    const placeFilters = `<div class="editor-place-filter-row" aria-label="依標籤篩選${labels[key]}">${[["all", "全部"], ...state.tagOptions[key].map(tag => [tag, tag])].map(([value, title]) => `<button type="button" class="editor-place-filter${value === activePlaceFilter ? " active" : ""}" data-place-filter="${esc(value)}">${esc(title)}</button>`).join("")}</div>`;
-    const categoryInput = (item, i) => `<label class="edit-label">標籤<input class="edit-input" name="places.${key}.${i}.category" list="tag-options-${key}" value="${esc(item.category)}" placeholder="選擇或輸入標籤" /></label>`;
-    const tagList = `<datalist id="tag-options-${key}">${state.tagOptions[key].map(tag => `<option value="${esc(tag)}"></option>`).join("")}</datalist>`;
-    const tagManager = `<details class="editor-tag-manager"><summary>標籤管理 · ${state.tagOptions[key].length} 個</summary><div class="editor-tag-list">${state.tagOptions[key].map((tag, i) => `<div class="editor-tag-entry"><span>${esc(tag)}</span><div><button type="button" class="edit-button tiny secondary" data-edit-tag="${i}">編輯</button><button type="button" class="edit-button tiny danger" data-delete-tag="${i}">刪除</button></div></div>`).join("") || '<span class="text-sm text-slate-500">尚無標籤</span>'}</div></details>`;
-    return `<div class="editor-place-toolbar">${placeFilters}<div class="editor-place-actions"><button type="button" class="edit-button secondary" data-add-tag="${key}">＋標籤</button><button type="button" class="edit-button editor-place-add" data-add-place="${key}" aria-label="新增${labels[key]}" title="新增${labels[key]}">+</button></div></div><p class="editor-place-help">選擇標籤篩選項目；可在「標籤管理」編輯或刪除標籤。</p>${tagManager}${tagList}${items.map((item, i) => `<details class="edit-card editor-place-card" data-place-category="${esc(item.category || "未分類")}"><summary class="editor-card-summary">${esc(item.name || `新${labels[key]}`)} <span class="text-xs text-slate-500">· ${esc(item.category || "未分類")}</span></summary><div class="edit-grid mt-3">${input("名稱", `places.${key}.${i}.name`, item.name)}${categoryInput(item, i)}${input("描述／備註", `places.${key}.${i}.description`, item.description)}${input("連結", `places.${key}.${i}.url`, item.url, "url", "https://...")}${input("緯度（選填）", `places.${key}.${i}.latitude`, item.latitude, "number")}${input("經度（選填）", `places.${key}.${i}.longitude`, item.longitude, "number")}</div><button type="button" class="edit-button tiny danger mt-3" data-delete-place="${key}.${i}">刪除此${labels[key]}</button></details>`).join("")}`;
-  }
-
-  function addTagDialog(key) {
-    showDialog(`<h2 class="text-xl font-bold mb-2">新增${labels[key]}標籤</h2><p class="text-sm text-slate-500 mb-4">建立後可在項目的標籤欄選用，儲存旅程後會保留。</p><form id="new-tag-form"><label class="edit-label">標籤名稱<input name="tag" class="edit-input" maxlength="100" required placeholder="例如 SPA／Massage" /></label><p id="tag-error" class="text-sm text-red-600 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>取消</button><button class="edit-button">新增標籤</button></div></form>`);
-    document.getElementById("new-tag-form").addEventListener("submit", event => {
-      event.preventDefault();
-      const value = String(new FormData(event.currentTarget).get("tag") || "").trim();
-      state.tagOptions ||= {};
-      state.tagOptions[key] ||= [];
-      if (!value) return;
-      if (state.tagOptions[key].some(tag => tag.toLocaleLowerCase() === value.toLocaleLowerCase())) {
-        document.getElementById("tag-error").textContent = "這個標籤已存在。";
-        return;
-      }
-      state.tagOptions[key].push(value);
-      editorHasUnsavedChanges = true;
-      closeDialog();
-      editDialog();
-    });
-  }
-
-  function editTagDialog(key, index) {
-    const oldTag = state.tagOptions?.[key]?.[index];
-    if (oldTag === undefined) return;
-    showDialog(`<h2 class="text-xl font-bold mb-2">編輯標籤</h2><p class="text-sm text-slate-500 mb-4">改名後，所有使用此標籤的項目與篩選會一起更新。</p><form id="edit-tag-form"><label class="edit-label">標籤名稱<input name="tag" class="edit-input" maxlength="100" required value="${esc(oldTag)}" /></label><p id="tag-error" class="text-sm text-red-600 mt-2"></p><div class="flex justify-end gap-2 mt-5"><button type="button" class="edit-button secondary" data-close>取消</button><button class="edit-button">儲存名稱</button></div></form>`);
-    document.getElementById("edit-tag-form").addEventListener("submit", event => {
-      event.preventDefault();
-      const updated = String(new FormData(event.currentTarget).get("tag") || "").trim();
-      const error = document.getElementById("tag-error");
-      if (!updated) { error.textContent = "請輸入標籤名稱。"; return; }
-      if (state.tagOptions[key].some((tag, i) => i !== index && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) { error.textContent = "這個標籤已存在。"; return; }
-      if (updated !== oldTag) {
-        state.tagOptions ||= {};
-        for (const placeKey of Object.keys(state.places || {})) {
-          state.places[placeKey].forEach(item => { if (item.category === oldTag) item.category = updated; });
-          const options = state.tagOptions[placeKey] || [];
-          const matching = options.indexOf(oldTag);
-          if (matching >= 0) {
-            if (options.some((tag, i) => i !== matching && tag.toLocaleLowerCase() === updated.toLocaleLowerCase())) options.splice(matching, 1);
-            else options[matching] = updated;
-          }
-          if (placeEditFilters[placeKey] === oldTag) placeEditFilters[placeKey] = updated;
-        }
-        editorHasUnsavedChanges = true;
-      }
-      closeDialog();
-      editDialog();
-    });
-  }
-
-  function setPath(object, path, value) { const parts = path.split("."); let ref = object; for (let i = 0; i < parts.length - 1; i++) ref = ref[parts[i]]; ref[parts.at(-1)] = value; }
-  function applyEditorPlaceFilter(key) {
-    const selected = placeEditFilters[key] || "all";
-    document.querySelectorAll(".editor-place-card").forEach(card => {
-      card.style.display = selected === "all" || card.dataset.placeCategory === selected ? "" : "none";
-    });
-    document.querySelectorAll("[data-place-filter]").forEach(button => button.classList.toggle("active", button.dataset.placeFilter === selected));
-  }
-  function bindSortable(root, itemSelector, handleSelector, onSorted) {
-    if (!root) return;
-    let dragged = null, changed = false;
-    const moveTo = (x, y) => {
-      const target = document.elementFromPoint(x, y)?.closest(itemSelector);
-      if (!dragged || !target || target === dragged || target.parentElement !== root) return;
-      const rect = target.getBoundingClientRect();
-      const before = root.id === "editor-day-list" ? x < rect.left + rect.width / 2 : y < rect.top + rect.height / 2;
-      root.insertBefore(dragged, before ? target : target.nextSibling); changed = true;
-    };
-    const finish = () => {
-      if (dragged && changed) onSorted([...root.querySelectorAll(itemSelector)]);
-      dragged?.classList.remove("is-dragging"); dragged = null; changed = false;
-    };
-    root.querySelectorAll(itemSelector).forEach(item => {
-      item.addEventListener("dragstart", event => { dragged = item; changed = false; item.classList.add("is-dragging"); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", "reorder"); });
-      item.addEventListener("dragend", () => { item.classList.remove("is-dragging"); dragged = null; });
-      item.addEventListener("pointerdown", event => {
-        if (event.pointerType !== "touch" || !event.target.closest(handleSelector)) return;
-        const pointer = event.pointerId, startX = event.clientX, startY = event.clientY;
-        let timer = setTimeout(() => { dragged = item; changed = false; item.classList.add("is-dragging"); }, 320);
-        const move = ev => { if (ev.pointerId !== pointer) return; if (!dragged) { if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) clearTimeout(timer); return; } ev.preventDefault(); moveTo(ev.clientX, ev.clientY); };
-        const end = ev => { if (ev.pointerId !== pointer) return; clearTimeout(timer); document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end); if (dragged === item) finish(); };
-        document.addEventListener("pointermove", move, { passive: false }); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
-      });
-    });
-    root.addEventListener("dragover", event => { if (!dragged) return; event.preventDefault(); moveTo(event.clientX, event.clientY); });
-    root.addEventListener("drop", event => { if (!dragged) return; event.preventDefault(); finish(); });
-  }
-  function bindEditor() {
-    const form = document.getElementById("trip-form");
-    form.addEventListener("input", () => { editorHasUnsavedChanges = true; });
-    form.addEventListener("change", () => { editorHasUnsavedChanges = true; });
-    form.addEventListener("click", event => {
-      if (event.target.closest("[data-add-day],[data-add-item],[data-delete-item],[data-delete-day],[data-add-flight],[data-delete-flight],[data-add-place],[data-delete-place],[data-add-tag]")) editorHasUnsavedChanges = true;
-    });
-    document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => { readForm(); activeTab = button.dataset.tab; editDialog(); }));
-    bindSortable(document.getElementById("editor-day-list"), ".editor-day-choice", ".editor-day-drag-grip", ordered => {
-      readForm();
-      const selected = state.days[activeEditDayIndex];
-      const anchor = state.days.map(day => calendarDateValue(day.date)).filter(Boolean).sort()[0];
-      const reordered = ordered.map(node => state.days[Number(node.dataset.dayIndex)]);
-      state.days.splice(0, state.days.length, ...reordered);
-      activeEditDayIndex = state.days.indexOf(selected);
-      resequenceDayDates(anchor);
-      editorHasUnsavedChanges = true;
-      editDialog();
-    });
-    document.querySelectorAll(".editor-day-card").forEach((card, cardIndex) => {
-      const root = card.querySelector(".editor-itinerary-row")?.parentElement;
-      bindSortable(root, ".editor-itinerary-row", ".itinerary-drag-handle", ordered => {
-        readForm();
-        const dayIndex = cardIndex;
-        const items = state.days[dayIndex]?.items;
-        if (!items) return;
-        const reordered = ordered.map(node => items[Number(node.dataset.itemIndex)]);
-        items.splice(0, items.length, ...reordered);
-        editorHasUnsavedChanges = true;
-        editDialog();
-      });
-    });
-    document.querySelectorAll("[data-place-filter]").forEach(button => button.addEventListener("click", () => { readForm(); placeEditFilters[activeTab] = button.dataset.placeFilter; applyEditorPlaceFilter(activeTab); }));
-    document.querySelectorAll("[data-add-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights ||= []; state.flights.push({ direction: button.dataset.addFlight || "去程", airline: "", flightNumber: "", departureTime: "", arrivalTime: "", departureAirport: "", arrivalAirport: "", date: "", note: "" }); editDialog(); }));
-    document.querySelectorAll("[data-delete-flight]").forEach(button => button.addEventListener("click", () => { readForm(); state.flights.splice(Number(button.dataset.deleteFlight), 1); editDialog(); }));
-    document.querySelector("[data-add-day]")?.addEventListener("click", () => { readForm(); const previous = [...state.days].reverse().find(day => calendarDateValue(day.date)); state.days.push({ date: previous ? shiftStoredDate(previous.date, 1) : "", destination: "", items: [] }); activeEditDayIndex = state.days.length - 1; editDialog(); });
-    document.querySelectorAll("[data-add-item]").forEach(button => button.addEventListener("click", () => { readForm(); activeEditDayIndex = Number(button.dataset.addItem); state.days[activeEditDayIndex].items.push({ time: "00:00-01:00", title: "", description: "" }); editDialog(); }));
-    document.querySelectorAll("[data-delete-item]").forEach(button => button.addEventListener("click", () => { readForm(); const [i,j] = button.dataset.deleteItem.split(".").map(Number); state.days[i].items.splice(j,1); editDialog(); }));
-    document.querySelectorAll("[data-delete-day]").forEach(button => button.addEventListener("click", () => { readForm(); const removedIndex = Number(button.dataset.deleteDay); state.days.splice(removedIndex,1); for (let i = removedIndex; i < state.days.length; i++) if (calendarDateValue(state.days[i].date)) state.days[i].date = shiftStoredDate(state.days[i].date, -1); activeEditDayIndex = Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)); editDialog(); }));
-    document.querySelectorAll("[data-add-place]").forEach(button => button.addEventListener("click", () => { readForm(); state.places[button.dataset.addPlace].push({ name: "", category: "", description: "", url: "", latitude: "", longitude: "" }); editDialog(); }));
-    document.querySelectorAll("[data-add-tag]").forEach(button => button.addEventListener("click", () => { readForm(); addTagDialog(button.dataset.addTag); }));
-    document.querySelectorAll("[data-edit-tag]").forEach(button => button.addEventListener("click", () => {
-      readForm();
-      editTagDialog(activeTab, Number(button.dataset.editTag));
-    }));
-    document.querySelectorAll("[data-delete-tag]").forEach(button => button.addEventListener("click", () => {
-      readForm();
-      const key = activeTab, index = Number(button.dataset.deleteTag), tag = state.tagOptions[key]?.[index];
-      if (tag === undefined || !window.confirm(`確定刪除「${tag}」標籤嗎？使用此標籤的項目會改為未分類。`)) return;
-      state.tagOptions[key].splice(index, 1);
-      state.places[key].forEach(item => { if (item.category === tag) item.category = ""; });
-      if (placeEditFilters[key] === tag) placeEditFilters[key] = "all";
-      editorHasUnsavedChanges = true; editDialog();
-    }));
-    document.querySelectorAll("[data-delete-place]").forEach(button => button.addEventListener("click", () => { readForm(); const [key,i] = button.dataset.deletePlace.split("."); state.places[key].splice(Number(i),1); editDialog(); }));
-    document.getElementById("trip-form").addEventListener("submit", async event => {
-      event.preventDefault(); readForm();
-      const msg = document.getElementById("save-message"); msg.textContent = "正在儲存…";
-      try { await api("/api/content", { method: "POST", body: JSON.stringify({ content: state }) }); editorHasUnsavedChanges = false; renderPage(); msg.textContent = "已儲存到 Cloudflare。"; }
-      catch (error) { msg.textContent = error.message; }
-    });
-    document.getElementById("logout-button").addEventListener("click", async () => { if (editorHasUnsavedChanges && !window.confirm("有尚未儲存的修改，確定登出並放棄嗎？")) return; try { await api("/api/logout", { method: "POST", body: "{}" }); } catch {} editorHasUnsavedChanges = false; token = ""; sessionStorage.removeItem(TOKEN_KEY); closeDialog(); });
-  }
-  function readForm() {
-    const form = document.getElementById("trip-form"); if (!form) return;
-    const data = new FormData(form);
-    for (const [path, value] of data) {
-      if (!path || path.endsWith(".calendarDate")) continue;
-      setPath(state, path, value);
-    }
-    for (let i = 0; i < state.days.length; i++) {
-      const date = data.get("days." + i + ".calendarDate");
-      if (date) state.days[i].date = calendarDateText(String(date));
-    }
-  }
-
-  function addStyles() {
-    const style = document.createElement("style"); style.textContent = `
-      .editor-overlay{position:fixed;inset:0;z-index:1000;background:#0f172a99;display:flex;align-items:center;justify-content:center;padding:12px}
-      .editor-panel{width:min(100%,440px);max-height:94vh;overflow:auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 20px 60px #0004}.editor-panel.wide{width:min(100%,860px)}
-      .edit-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:12px;margin-bottom:12px}.edit-tab{white-space:nowrap;border:1px solid #e2e8f0;border-radius:999px;padding:7px 12px;background:#fff;color:#475569;font-size:13px}.edit-tab.active,.edit-button{background:#b91c1c;color:#fff;border:0}
-      .edit-button{border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600}.time-wheel{min-height:42px;appearance:auto}.time-wheel-group{display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-column:1/-1;min-width:0}.time-point{border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:9px}.time-point>strong{display:block;font-size:12px;color:#475569;margin-bottom:6px}.time-units{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.time-units label{font-size:10px;color:#64748b;display:flex;flex-direction:column;gap:3px}.time-units .edit-input{padding:7px 4px;text-align:center}@media(max-width:640px){.time-wheel-group{grid-template-columns:1fr}.time-point{padding:8px}.time-units{gap:8px}}
-      button:not(:disabled){transition:transform .12s ease,filter .12s ease,box-shadow .12s ease;-webkit-tap-highlight-color:transparent}
-      button:not(:disabled):active{transform:scale(.96);filter:brightness(.91);box-shadow:inset 0 2px 5px rgba(15,23,42,.22)}
-      button:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.edit-button.secondary{background:#f1f5f9;color:#334155}.edit-button.danger{background:#fee2e2;color:#b91c1c}.edit-button.tiny{padding:6px 9px;font-size:12px}
-      .edit-label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#475569;min-width:0}.edit-input{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;color:#0f172a;background:#fff}.edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.edit-row{display:grid;grid-template-columns:1fr 1.5fr 1.5fr auto;gap:8px;align-items:end;border-top:1px solid #e2e8f0;padding:10px 0}.time-wheel-group{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:end;min-width:250px}.time-wheel-group.single-time-wheel{grid-template-columns:minmax(0,1fr);max-width:280px}.time-range-separator{padding-bottom:10px;color:#64748b;font-weight:700}.edit-row>.time-wheel-group{grid-column:1/-1}@media(min-width:641px){.edit-row{grid-template-columns:minmax(250px,1.5fr) 1.2fr 1.5fr auto}.edit-row>.time-wheel-group{grid-column:auto}}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle:disabled{cursor:default;opacity:.85}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login,.trip-editor-share{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.trip-editor-share{background:#fee2e2;color:#7f1d1d}.shared-favorites-banner{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600}.shared-favorites-banner.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+    return `<label class="edit-label">${esc(label)}<input class="edit-input" name="${esc(name)}" type="${typ…6666 tokens truncated…ign-items:end;min-width:250px}.time-wheel-group.single-time-wheel{grid-template-columns:minmax(0,1fr);max-width:280px}.time-range-separator{padding-bottom:10px;color:#64748b;font-weight:700}.edit-row>.time-wheel-group{grid-column:1/-1}@media(min-width:641px){.edit-row{grid-template-columns:minmax(250px,1.5fr) 1.2fr 1.5fr auto}.edit-row>.time-wheel-group{grid-column:auto}}.edit-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin:10px 0}.edit-card summary{cursor:pointer;font-weight:700;font-size:14px}.favorite-toggle{flex:0 0 auto;width:32px;height:32px;border-radius:9999px;color:#94a3b8;font-size:23px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,transform .15s}.favorite-toggle:hover{transform:scale(1.08)}.favorite-toggle:disabled{cursor:default;opacity:.85}.favorite-toggle.is-favorite{color:#dc2626}.favorite-toggle:focus-visible{outline:2px solid #dc2626;outline-offset:2px}.trip-editor-login,.trip-editor-share{border:0;border-radius:999px;background:#fff;color:#b91c1c;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}.trip-editor-share{background:#fee2e2;color:#7f1d1d}.shared-favorites-banner{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600}.shared-favorites-banner.error{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
       @media(max-width:640px){.editor-overlay{padding:0;align-items:flex-end}.editor-panel,.editor-panel.wide{width:100%;max-height:96vh;border-radius:16px 16px 0 0;padding:16px}.edit-grid{grid-template-columns:1fr}.edit-row{grid-template-columns:1fr 1fr}.edit-row .edit-label:nth-child(3){grid-column:1/-1}.edit-row button{justify-self:start}}
       /* Travel planner refresh: preserve Hanoi content and features while refining the layout. */
       :root{--trip-teal:#168f91;--trip-teal-dark:#126f73;--trip-ink:#173b40;--trip-canvas:#f4f8f7;--trip-line:#dcebea}
@@ -1041,13 +823,15 @@
       body[data-active-tab="sec-itinerary"] header.sticky{position:sticky!important;top:0!important;z-index:60!important;max-width:480px!important}
       body:not([data-active-tab="sec-itinerary"]) header.sticky{display:none!important}
       .trip-header-actions{margin-left:auto;flex:0 0 auto}
+      .trip-add-home{border:1px solid #c9e3e1!important;border-radius:999px!important;background:#168f91!important;color:#fff!important;padding:9px 13px!important;font-size:12px!important;font-weight:800!important;white-space:nowrap;box-shadow:0 3px 10px rgba(22,143,145,.18)}
+      .trip-add-home:active{transform:scale(.96)}
       body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{position:sticky;top:0;z-index:55;display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:12px 2px;background:#f4f8f7;box-shadow:0 5px 12px rgba(37,83,84,.04)}
       body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2 .trip-header-actions{margin-left:auto}
       body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>.place-filters{position:sticky;top:52px;z-index:54;margin:0 0 10px;padding:9px 0 11px;background:#f4f8f7}
       body:not([data-active-tab="sec-itinerary"]) #sec-map>.bg-white{position:sticky;top:48px;z-index:54;margin:0 0 10px;padding:10px;background:#f4f8f7;border:0!important;border-radius:0!important;box-shadow:0 5px 12px rgba(37,83,84,.04)!important}
       body:not([data-active-tab="sec-itinerary"]) #sec-map #map-category-filter{gap:6px}
       .map-pin{touch-action:none;user-select:none;-webkit-user-select:none}
-      @media(max-width:640px){body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{top:0;padding:10px 2px}.trip-header-actions .trip-editor-login{padding:7px 10px!important;font-size:11px}}
+      @media(max-width:640px){body:not([data-active-tab="sec-itinerary"]) .tab-content:not(.hidden)>h2{top:0;padding:10px 2px}.trip-header-actions{gap:5px!important}.trip-header-actions .trip-editor-login,.trip-header-actions .trip-add-home{padding:7px 8px!important;font-size:10px!important}}
       .weather-credit{display:inline-flex;margin-top:4px;color:#819198;font-size:9px;line-height:1.3;text-decoration:none}
       .weather-credit:hover{text-decoration:underline;color:#198e8b}
       header span.bg-red-800{display:none!important;max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1095,12 +879,16 @@
 
   async function init() {
     addStyles();
+    window.addEventListener("beforeinstallprompt", event => { event.preventDefault(); pendingHomeInstall = event; });
+    window.addEventListener("appinstalled", () => { pendingHomeInstall = null; });
     const header = document.querySelector("header > div");
     if (header) {
       const actions = el("div", "flex items-center gap-2 trip-header-actions");
       const login = el("button", "trip-editor-login", "登入編輯");
       login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editorHasUnsavedChanges = false; editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
-      actions.append(login); header.append(actions);
+      const homeButton = el("button", "trip-add-home", "加入主畫面");
+      homeButton.type = "button"; homeButton.addEventListener("click", addToHomeScreen);
+      actions.append(login, homeButton); header.append(actions);
       const h1 = header.querySelector("h1");
       if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
       const placeActions = tabId => {
