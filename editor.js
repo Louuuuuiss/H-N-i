@@ -1142,6 +1142,9 @@
       .editor-day-fixed-actions{grid-template-columns:max-content minmax(0,1fr) minmax(0,1fr) auto}
       .editor-day-fixed-actions>strong{white-space:nowrap}
       @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:max-content minmax(0,1fr) minmax(0,1fr) auto}}
+      button:not(:disabled),[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+      button:not(:disabled):active,button:not(:disabled).is-pressed,[role="button"]:active,[role="button"].is-pressed{transform:scale(.96)!important;filter:brightness(.9) saturate(1.06)!important;box-shadow:inset 0 2px 6px rgba(15,23,42,.18),0 1px 3px rgba(15,23,42,.08)!important}
+      @media(prefers-reduced-motion:reduce){button:not(:disabled),[role="button"]{transition-duration:.01ms!important}}
     `; document.head.append(style);
   }
 
@@ -1163,8 +1166,27 @@
     } catch (error) { console.warn("共用最愛尚未同步：", error.message); }
   }
 
+  function bindButtonPressFeedback() {
+    const selector = 'button:not(:disabled),[role="button"]';
+    const clearPressed = () => document.querySelectorAll(".is-pressed").forEach(button => button.classList.remove("is-pressed"));
+    document.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+      const button = event.target.closest(selector);
+      if (!button) return;
+      clearPressed();
+      button.classList.add("is-pressed");
+    }, { passive: true });
+    const releasePressed = () => window.setTimeout(clearPressed, 110);
+    document.addEventListener("pointerup", releasePressed, true);
+    document.addEventListener("pointercancel", clearPressed, true);
+    document.addEventListener("dragstart", clearPressed, true);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) clearPressed(); });
+    window.addEventListener("blur", clearPressed);
+  }
+
   async function init() {
     addStyles();
+    bindButtonPressFeedback();
     window.addEventListener("beforeinstallprompt", event => { event.preventDefault(); pendingHomeInstall = event; });
     window.addEventListener("appinstalled", () => { pendingHomeInstall = null; });
     const header = document.querySelector("header > div");
