@@ -595,7 +595,7 @@
   }
 
   function prepareDayEditor(panel) {
-    const toolbar = panel.querySelector(".days-toolbar");
+    const toolbar = panel.querySelector(".edit-tabs");
     if (!toolbar) return;
     activeEditDayIndex = state.days.length ? Math.max(0, Math.min(activeEditDayIndex, state.days.length - 1)) : 0;
     const picker = el("div", "editor-day-picker");
@@ -723,7 +723,7 @@
         input("備註", "flights." + i + ".note", flight.note) + '</div></section>').join("");
       return '<div class="editor-section-intro"><span class="editor-section-kicker">FLIGHT DETAILS</span><h3>航班資訊</h3><p>使用 24 小時制設定航班時間，可選擇去程或回程。</p><div class="flight-add-actions"><button type="button" class="edit-button" data-add-flight="去程">＋ 新增去程</button><button type="button" class="edit-button secondary" data-add-flight="回程">＋ 新增回程</button></div></div>' + (cards || '<div class="editor-empty">尚未新增航班，請新增去程或回程航班。</div>');
     }
-        if (activeTab === "days") return `<div class="days-toolbar"><div><span class="editor-section-kicker">DAILY PLAN</span><h3>每日行程</h3><p>可新增天數，並設定日期與單一時間。</p></div></div>${state.days.map((day, i) => `<section class="edit-card editor-day-card"><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}<div class="itinerary-item-fields"><input class="edit-input itinerary-title-input" name="days.${i}.items.${j}.title" value="${esc(item.title)}" aria-label="行程" placeholder="行程項目" /><input class="edit-input itinerary-note-input" name="days.${i}.items.${j}.description" value="${esc(item.description || "")}" aria-label="備註" placeholder="備註（選填）" /></div><button type="button" class="edit-button itinerary-delete-icon" data-delete-item="${i}.${j}" aria-label="刪除此行程" title="刪除行程"><span aria-hidden="true">×</span></button></div>`).join("")}</div></section>`).join("")}`;
+        if (activeTab === "days") return `${state.days.map((day, i) => `<section class="edit-card editor-day-card"><div class="mt-3"><div class="flex justify-between items-center mb-2"><strong class="text-sm">行程項目　<span class="itinerary-sort-hint">⠿ 可拖曳排序</span></strong></div>${day.items.map((item, j) => `<div class="edit-row editor-itinerary-row" data-item-index="${j}" draggable="true"><span class="itinerary-drag-handle" aria-label="拖曳調整順序">⠿</span>${`<div class="time-wheel-group single-time-wheel">${timePointEditor(i, j, "time", readSingleTime(item.time), "行程")}</div>`}<div class="itinerary-item-fields"><input class="edit-input itinerary-title-input" name="days.${i}.items.${j}.title" value="${esc(item.title)}" aria-label="行程" placeholder="行程項目" /><input class="edit-input itinerary-note-input" name="days.${i}.items.${j}.description" value="${esc(item.description || "")}" aria-label="備註" placeholder="備註（選填）" /></div><button type="button" class="edit-button itinerary-delete-icon" data-delete-item="${i}.${j}" aria-label="刪除此行程" title="刪除行程"><span aria-hidden="true">×</span></button></div>`).join("")}</div></section>`).join("")}`;
     const key = activeTab; const items = state.places[key];
     state.tagOptions ||= {};
     state.tagOptions[key] = [...new Set([...(state.tagOptions[key] || []), ...items.map(item => item.category).filter(Boolean)])];
