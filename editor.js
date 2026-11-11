@@ -1139,6 +1139,9 @@
       .editor-day-fixed-actions{grid-template-columns:minmax(72px,.55fr) minmax(0,1fr) minmax(0,1fr) auto}
       @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:minmax(54px,.55fr) minmax(0,1fr) minmax(0,1fr) auto;gap:4px;padding:7px 5px}.editor-day-fixed-actions>strong{font-size:11px;line-height:1.2}}
       @media(max-width:360px){.editor-day-fixed-actions{grid-template-columns:48px minmax(0,1fr) minmax(0,1fr) auto}.editor-day-fixed-actions>strong{font-size:10px}}
+      .editor-day-fixed-actions{grid-template-columns:max-content minmax(0,1fr) minmax(0,1fr) auto}
+      .editor-day-fixed-actions>strong{white-space:nowrap}
+      @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:max-content minmax(0,1fr) minmax(0,1fr) auto}}
     `; document.head.append(style);
   }
 
