@@ -624,6 +624,7 @@
     sticky.append(picker);
     if (state.days.length) {
       const actions = el("div", "editor-day-fixed-actions");
+      actions.append(el("strong", "", `第 ${activeEditDayIndex + 1} 天`));
       const day = state.days[activeEditDayIndex];
       const dateField = el("label", "edit-label editor-day-inline-field", "日期");
       const dateInput = el("input", "edit-input");
@@ -1135,9 +1136,9 @@
       .editor-day-inline-field>.edit-input{width:100%;min-width:0;min-height:38px;padding:6px 8px;font-size:12px;box-sizing:border-box}
       @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:minmax(60px,.55fr) minmax(0,1fr) minmax(0,1fr) auto;gap:4px;padding:7px 5px}.editor-day-fixed-actions>strong{font-size:11px;line-height:1.2}.editor-day-inline-field{gap:2px;font-size:8px}.editor-day-inline-field>.edit-input{min-height:34px;padding:4px;font-size:10px}.editor-day-fixed-buttons{gap:3px}.editor-day-fixed-buttons .edit-button{min-height:34px;padding:4px 5px;font-size:9px;white-space:nowrap}}
       @media(max-width:360px){.editor-day-fixed-actions{grid-template-columns:52px minmax(0,1fr) minmax(0,1fr) auto;gap:2px;padding:6px 3px}.editor-day-fixed-actions>strong{font-size:10px}.editor-day-fixed-buttons .edit-button{padding:3px;font-size:8px}}
-      .editor-day-fixed-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
-      @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:5px;padding:7px 5px}}
-      @media(max-width:360px){.editor-day-fixed-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}}
+      .editor-day-fixed-actions{grid-template-columns:minmax(72px,.55fr) minmax(0,1fr) minmax(0,1fr) auto}
+      @media(max-width:760px){.editor-day-fixed-actions{grid-template-columns:minmax(54px,.55fr) minmax(0,1fr) minmax(0,1fr) auto;gap:4px;padding:7px 5px}.editor-day-fixed-actions>strong{font-size:11px;line-height:1.2}}
+      @media(max-width:360px){.editor-day-fixed-actions{grid-template-columns:48px minmax(0,1fr) minmax(0,1fr) auto}.editor-day-fixed-actions>strong{font-size:10px}}
     `; document.head.append(style);
   }
 
