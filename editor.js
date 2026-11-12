@@ -263,20 +263,16 @@
 
   function estimatedCostFromNote(note) {
     const text = String(note || "");
-    const pattern = /(vnd\\s*)?(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|m|million|triệu|tr|vnd|₫|đ)?/gi;
+    const pattern = /(vnd\s*)?(\d[\d,]*(?:\.\d+)?)\s*(k|m|million|triệu|tr|vnd|₫|đ)?/gi;
     let total = 0;
     for (const match of text.matchAll(pattern)) {
-      const prefix = Boolean(match[1]);
+      const hasCurrencyPrefix = Boolean(match[1]);
       const raw = match[2];
       const unit = String(match[3] || "").toLowerCase();
-      if (!unit && !prefix) continue;
-      let amount;
-      if ((unit === "k" || unit === "m" || unit === "million" || unit === "tr" || unit === "triệu") &&
-          /[,.]/.test(raw) && /[,.]\\d{1,2}$/.test(raw)) {
-        amount = Number(raw.replace(",", "."));
-      } else {
-        amount = Number(raw.replace(/[,.]/g, ""));
-      }
+      if (!unit && !hasCurrencyPrefix) continue;
+      const scaleUnit = ["k", "m", "million", "tr", "triệu"].includes(unit);
+      const decimalAmount = scaleUnit && /[,.]/.test(raw) && /[,.]\d{1,2}$/.test(raw);
+      const amount = decimalAmount ? Number(raw.replace(",", ".")) : Number(raw.replace(/[,.]/g, ""));
       if (!Number.isFinite(amount)) continue;
       const multiplier = unit === "k" ? 1e3 : ["m", "million", "tr", "triệu"].includes(unit) ? 1e6 : 1;
       total += amount * multiplier;
