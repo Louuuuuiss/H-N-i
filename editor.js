@@ -263,7 +263,7 @@
 
   function estimatedCostFromNote(note) {
     const text = String(note || "");
-    const pattern = /(vnd\s*)?(\d[\d,]*(?:\.\d+)?)\s*(k|m|million|triệu|tr|vnd|₫|đ)?/gi;
+    const pattern = /(vnd\s*)?(\d[\d,]*(?:\.\d+)?)\s*(k|m|million|triệu|tr|vnd|₫|đ)?(?![a-z])/gi;
     let total = 0;
     for (const match of text.matchAll(pattern)) {
       const hasCurrencyPrefix = Boolean(match[1]);
