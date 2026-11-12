@@ -261,6 +261,29 @@
     if (header && headerRow && box.parentElement !== header) headerRow.insertAdjacentElement("afterend", box);
   }
 
+  function estimatedCostFromNote(note) {
+    const text = String(note || "");
+    const pattern = /(vnd\\s*)?(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|m|million|triệu|tr|vnd|₫|đ)?/gi;
+    let total = 0;
+    for (const match of text.matchAll(pattern)) {
+      const prefix = Boolean(match[1]);
+      const raw = match[2];
+      const unit = String(match[3] || "").toLowerCase();
+      if (!unit && !prefix) continue;
+      let amount;
+      if ((unit === "k" || unit === "m" || unit === "million" || unit === "tr" || unit === "triệu") &&
+          /[,.]/.test(raw) && /[,.]\\d{1,2}$/.test(raw)) {
+        amount = Number(raw.replace(",", "."));
+      } else {
+        amount = Number(raw.replace(/[,.]/g, ""));
+      }
+      if (!Number.isFinite(amount)) continue;
+      const multiplier = unit === "k" ? 1e3 : ["m", "million", "tr", "triệu"].includes(unit) ? 1e6 : 1;
+      total += amount * multiplier;
+    }
+    return total;
+  }
+
   function renderPage() {
     if (!state) return;
     const savedPageScroll = window.scrollY;
@@ -330,7 +353,14 @@
         credit.href = "https://open-meteo.com/"; credit.target = "_blank"; credit.rel = "noopener noreferrer";
         overviewCopy.append(credit);
       }
-      overview.append(overviewCopy, el("span", "trip-day-count", items.length + " 個行程"));
+      const dayBadges = el("div", "trip-day-badges");
+      dayBadges.append(el("span", "trip-day-count", items.length + " 個行程"));
+      const estimatedCost = items.reduce((sum, item) => sum + estimatedCostFromNote(item.description), 0);
+      if (estimatedCost > 0) {
+        const formattedCost = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Math.round(estimatedCost));
+        dayBadges.append(el("span", "trip-day-expense", "預估花費：" + formattedCost + " VND"));
+      }
+      overview.append(overviewCopy, dayBadges);
       if (weatherCache.location === String(state.weatherLocation || "").trim() && weatherCache.data) renderDayWeather(weatherCache.location, weatherCache.data);
 
       itinerary.querySelectorAll(":scope > div.bg-white, :scope > article.trip-day").forEach(n => n.remove());
@@ -1145,6 +1175,10 @@
       button:not(:disabled),[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
       button:not(:disabled):active,button:not(:disabled).is-pressed,[role="button"]:active,[role="button"].is-pressed{transform:scale(.96)!important;filter:brightness(.9) saturate(1.06)!important;box-shadow:inset 0 2px 6px rgba(15,23,42,.18),0 1px 3px rgba(15,23,42,.08)!important}
       @media(prefers-reduced-motion:reduce){button:not(:disabled),[role="button"]{transition-duration:.01ms!important}}
+      .trip-refresh{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0!important;font-size:22px!important;line-height:1}
+      .trip-day-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto;max-width:58%}
+      .trip-day-expense{display:inline-flex;align-items:center;justify-content:center;padding:6px 9px;border-radius:999px;background:#e7f5f2;color:#167c78;font-size:10px;font-weight:750;line-height:1.25;text-align:right;white-space:nowrap}
+      @media(max-width:640px){.trip-day-badges{max-width:52%}.trip-day-expense{padding:5px 7px;font-size:9px;white-space:normal}}
     `; document.head.append(style);
   }
 
@@ -1194,8 +1228,8 @@
       const actions = el("div", "flex items-center gap-2 trip-header-actions");
       const login = el("button", "trip-editor-login", "登入編輯");
       login.type = "button"; login.addEventListener("click", async () => { if (!token) return loginDialog(); try { await api("/api/content"); editorHasUnsavedChanges = false; editDialog(); } catch { token = ""; sessionStorage.removeItem(TOKEN_KEY); loginDialog(); } });
-      const homeButton = el("button", "trip-add-home", "加入主畫面");
-      homeButton.type = "button"; homeButton.addEventListener("click", addToHomeScreen);
+      const homeButton = el("button", "trip-add-home trip-refresh", "↻");
+      homeButton.type = "button"; homeButton.setAttribute("aria-label", "重新整理"); homeButton.title = "重新整理"; homeButton.addEventListener("click", () => window.location.reload());
       actions.append(homeButton, login); header.append(actions);
       const h1 = header.querySelector("h1");
       if (h1 && !header.querySelector(".trip-eyebrow")) h1.insertAdjacentElement("beforebegin", el("span", "trip-eyebrow", "HANOI JOURNEY"));
